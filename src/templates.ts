@@ -19,7 +19,8 @@ export type CellShape =
   | 'diamond'
   | 'arch'
   | 'star'
-  | 'pill';
+  | 'pill'
+  | 'poly';
 
 export interface Cell {
   x: number;
@@ -33,6 +34,8 @@ export interface Cell {
   rotate?: number;
   /** Polaroid-style frame drawn behind the photo (fractions of the cell's short side). */
   frame?: { pad: number; bottom: number; color: string };
+  /** For shape 'poly': polygon points in 0..1 of the cell rect. */
+  poly?: [number, number][];
 }
 
 export type Category =
@@ -44,15 +47,31 @@ export type Category =
   | '6+ Photos'
   | 'Shapes'
   | 'Freestyle'
-  | 'Stories';
+  | 'Stories'
+  | 'Seamless'
+  | 'Split screen'
+  | 'Profile grid';
 
-export interface Template {
+/** What gets exported: one image, a swipeable carousel, or tiles for the profile grid. */
+export type Mode = 'post' | 'carousel' | 'split' | 'grid';
+
+interface TemplateDef {
   id: string;
   name: string;
   category: Category;
+  /** Cells in 0..1 of the WHOLE canvas (all slides side by side). */
   cells: Cell[];
   /** Aspect ratio this template looks best in (optional hint). */
   preferredAspect?: AspectId;
+}
+
+export interface Template extends TemplateDef {
+  mode: Mode;
+  /** Slides across and down. A post is 1×1, a carousel N×1, a grid post 3×rows. */
+  cols: number;
+  rows: number;
+  /** Same design at a different slide count shares a baseId. */
+  baseId: string;
 }
 
 export type AspectId = '1:1' | '4:5' | '9:16' | '1.91:1' | '3:4';
@@ -69,23 +88,23 @@ export const ASPECTS: { id: AspectId; label: string; ratio: number; hint: string
 /* Guillotine layout DSL                                               */
 /* ------------------------------------------------------------------ */
 
-type Node = 'L' | { dir: 'H' | 'V'; weights: number[]; children: Node[] };
+export type Node = 'L' | { dir: 'H' | 'V'; weights: number[]; children: Node[] };
 
-const L: Node = 'L';
+export const L: Node = 'L';
 /** Side-by-side columns. */
-const H = (weights: number[] | null, ...children: Node[]): Node => ({
+export const H = (weights: number[] | null, ...children: Node[]): Node => ({
   dir: 'H',
   weights: weights ?? children.map(() => 1),
   children,
 });
 /** Stacked rows. */
-const V = (weights: number[] | null, ...children: Node[]): Node => ({
+export const V = (weights: number[] | null, ...children: Node[]): Node => ({
   dir: 'V',
   weights: weights ?? children.map(() => 1),
   children,
 });
 
-function layout(node: Node, x = 0, y = 0, w = 1, h = 1, out: Cell[] = []): Cell[] {
+export function layout(node: Node, x = 0, y = 0, w = 1, h = 1, out: Cell[] = []): Cell[] {
   if (node === 'L') {
     out.push({ x, y, w, h });
     return out;
@@ -112,10 +131,10 @@ const signature = (cells: Cell[]) =>
 /* Generators                                                           */
 /* ------------------------------------------------------------------ */
 
-const templates: Template[] = [];
+const templates: TemplateDef[] = [];
 const seen = new Set<string>();
 
-function add(t: Template, dedupe = true) {
+function add(t: TemplateDef, dedupe = true) {
   if (dedupe) {
     const sig = signature(t.cells) + (t.cells[0]?.shape ?? '');
     if (seen.has(sig)) return;
@@ -420,7 +439,7 @@ stories.forEach(([name, node], i) =>
   add({ id: `story-${i}`, name, category: 'Stories', cells: layout(node), preferredAspect: '9:16' }, false),
 );
 
-export const TEMPLATES: readonly Template[] = templates;
+export const TEMPLATES: readonly Template[] = templates.map((t) => ({ ...t, mode: 'post', cols: 1, rows: 1, baseId: t.id }));
 
 export const CATEGORIES: Category[] = [
   'Grid',

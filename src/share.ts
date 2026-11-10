@@ -1,28 +1,29 @@
 /**
- * Saving & sharing.
+ * Saving & sharing (iOS / Android).
  *
- * Saving: the finished collage is written to its own album / folder called
- * "Collage Studio" so it stays separate from the original photos.
+ * Saving: finished images go to their own album / folder called "Collage Studio",
+ * separate from the original photos.
  *   - Android: a real folder, Pictures/Collage Studio
  *   - iOS: an album named "Collage Studio" in the Photos app
+ * Carousel slides are saved in swipe order (1 → N). Profile-grid tiles are saved in
+ * POSTING order (bottom-right tile first), because the newest post shows top-left.
  *
  * Instagram: we deliberately do NOT log in to Instagram or store any tokens.
- * Instagram's publishing API (Graph API) only works for Business/Creator
- * accounts, needs a Facebook app secret held on a server, requires the image
- * to be uploaded to a public URL first, and must pass Meta app review.
- * Shipping any of that inside a phone app would leak credentials.
- *
- * Instead we hand the saved file to Instagram through the operating system:
- *   - iOS: the official `instagram://library?LocalIdentifier=` deep link opens
- *     Instagram's composer with the collage already selected.
- *   - Android / fallback: the system share sheet (Instagram Feed, Stories,
- *     Reels and Direct all appear there when Instagram is installed).
- * The user stays logged in to the real Instagram app; this app never sees
- * their password.
+ * Instagram's publishing API (Graph API) only works for Business/Creator accounts,
+ * needs a Facebook app secret held on a server, requires images on a public URL,
+ * and must pass Meta app review. Shipping that inside a phone app would leak
+ * credentials. Instead the saved files are handed to the real Instagram app:
+ *   - iOS: the official `instagram://library?LocalIdentifier=` link opens the
+ *     composer with the (first) image selected.
+ *   - Android / fallback: the system share sheet, or simply opening Instagram.
  */
 import { Album, Asset, requestPermissionsAsync } from 'expo-media-library';
 import * as Sharing from 'expo-sharing';
 import { Linking, Platform } from 'react-native';
+
+import { postingStep } from './project';
+import type { ExportResult } from './render';
+import type { Template } from './templates';
 
 export const ALBUM_NAME = 'Collage Studio';
 
@@ -37,10 +38,6 @@ export async function ensurePermission(): Promise<boolean> {
 }
 
 export async function saveToAlbum(fileUri: string): Promise<SavedCollage> {
-  if (!(await ensurePermission())) {
-    throw new Error('Photo library permission is needed to save your collage.');
-  }
-
   try {
     const existing = await Album.get(ALBUM_NAME);
     if (existing) {
@@ -61,31 +58,41 @@ export async function saveToAlbum(fileUri: string): Promise<SavedCollage> {
   }
 }
 
-export async function isInstagramInstalled(): Promise<boolean> {
-  if (Platform.OS !== 'ios') return true; // Android: Instagram shows up in the share sheet if installed.
-  try {
-    return await Linking.canOpenURL('instagram://app');
-  } catch {
-    return false;
-  }
+/** Order files should be saved/posted in. */
+export function saveOrder(result: ExportResult, template: Template) {
+  const slides = [...result.slides];
+  if (template.mode === 'grid') slides.sort((a, b) => postingStep(template, a.index) - postingStep(template, b.index));
+  return slides;
 }
 
-export async function shareToInstagram(fileUri: string, saved: SavedCollage | null, mime: string) {
-  if (Platform.OS === 'ios' && saved?.asset) {
-    const url = `instagram://library?LocalIdentifier=${encodeURIComponent(saved.asset.id)}`;
-    if (await Linking.canOpenURL(url)) {
-      await Linking.openURL(url);
-      return;
-    }
+export async function saveOutputs(result: ExportResult, template: Template): Promise<SavedCollage[]> {
+  if (!(await ensurePermission())) throw new Error('Allow photo access in Settings to save your collage.');
+  const saved: SavedCollage[] = [];
+  for (const s of saveOrder(result, template)) {
+    saved.push(await saveToAlbum(s.uri));
+    // Distinct creation times keep the order stable in the Photos / Gallery app.
+    await new Promise((r) => setTimeout(r, 120));
   }
-  await shareFile(fileUri, mime, 'Share to Instagram');
+  return saved;
 }
 
 export async function shareFile(fileUri: string, mime: string, title = 'Share collage') {
   if (!(await Sharing.isAvailableAsync())) throw new Error('Sharing is not available on this device.');
-  await Sharing.shareAsync(fileUri, {
-    mimeType: mime,
-    UTI: mime === 'image/png' ? 'public.png' : 'public.jpeg',
-    dialogTitle: title,
-  });
+  await Sharing.shareAsync(fileUri, { mimeType: mime, UTI: mime === 'image/png' ? 'public.png' : 'public.jpeg', dialogTitle: title });
+}
+
+/** Hand the export to Instagram. Single images go straight to the composer or share sheet. */
+export async function openInstagram(result: ExportResult, saved: SavedCollage[], mime: string) {
+  const first = saved[0]?.asset;
+  if (Platform.OS === 'ios' && first) {
+    const url = `instagram://library?LocalIdentifier=${encodeURIComponent(first.id)}`;
+    if (await Linking.canOpenURL(url)) return Linking.openURL(url);
+  }
+  if (result.slides.length === 1) return shareFile(result.slides[0].uri, mime, 'Share to Instagram');
+  // Several images: open Instagram, where the user multi-selects them from the album.
+  try {
+    await Linking.openURL('instagram://app');
+  } catch {
+    await Linking.openURL('https://www.instagram.com/');
+  }
 }

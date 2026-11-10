@@ -2,10 +2,15 @@
  * Collage rendering.
  *
  * The exact same drawing code is used for the live preview and for the final
- * export. The export is drawn on a CPU (raster) Skia surface at the chosen
- * output resolution using each photo's ORIGINAL full-resolution file, decoded
- * one at a time to keep memory low. Nothing is ever drawn on top of the
- * collage: there is no watermark.
+ * export. A project is one canvas made of `cols × rows` slides laid side by
+ * side (a single post is 1×1, a carousel N×1, a profile-grid post 3×rows), so
+ * photos and gradients can flow seamlessly across slide edges.
+ *
+ * Export renders each slide separately on a CPU (raster) Skia surface at the
+ * chosen resolution, using each photo's ORIGINAL full-resolution file. Photos
+ * are decoded on demand and released as soon as no later slide needs them,
+ * which keeps memory flat even for 20-slide carousels. Nothing is ever drawn
+ * on top of the collage: there is no watermark.
  */
 import {
   BlurStyle,
@@ -15,6 +20,7 @@ import {
   MipmapMode,
   PaintStyle,
   Skia,
+  TileMode,
   type SkCanvas,
   type SkImage,
   type SkPath,
@@ -24,12 +30,15 @@ import {
 import { writeOutput } from './output';
 import type { Cell, CellShape, Template } from './templates';
 
-/** Values are in pixels at a 1080 px wide canvas and scale with the output size. */
+/** Spacing values are pixels on a 1080 px wide SLIDE and scale with the output size. */
 export interface Design {
   gap: number;
   margin: number;
   radius: number;
   background: string;
+  /** Optional two-stop gradient across the whole canvas (flows across slides). */
+  gradient: [string, string] | null;
+  gradientAngle: number;
   shadow: boolean;
 }
 
@@ -38,6 +47,8 @@ export const DEFAULT_DESIGN: Design = {
   margin: 12,
   radius: 0,
   background: '#FFFFFF',
+  gradient: null,
+  gradientAngle: 0,
   shadow: true,
 };
 
@@ -68,14 +79,24 @@ export interface ResolvedCell {
   rotate: number;
   shape: CellShape;
   frame?: Cell['frame'];
+  poly?: Cell['poly'];
 }
 
 const EPS = 1e-4;
 
-export function resolveCells(template: Template, width: number, height: number, design: Design): ResolvedCell[] {
-  const k = width / 1080;
-  const margin = design.margin * k;
-  const gap = design.gap * k;
+/**
+ * Lay out cells on a canvas of `width × height` pixels.
+ * `unit` = slide width / 1080: spacing scales with the slide, not the canvas.
+ */
+export function resolveCells(
+  template: Template,
+  width: number,
+  height: number,
+  design: Design,
+  unit = width / template.cols / 1080,
+): ResolvedCell[] {
+  const margin = design.margin * unit;
+  const gap = design.gap * unit;
   const areaW = width - margin * 2;
   const areaH = height - margin * 2;
 
@@ -100,15 +121,10 @@ export function resolveCells(template: Template, width: number, height: number, 
       const s = Math.min(rect.width, rect.height);
       const pad = cell.frame.pad * s;
       const bottom = cell.frame.bottom * s;
-      photoRect = {
-        x: rect.x + pad,
-        y: rect.y + pad,
-        width: rect.width - pad * 2,
-        height: rect.height - pad - bottom,
-      };
+      photoRect = { x: rect.x + pad, y: rect.y + pad, width: rect.width - pad * 2, height: rect.height - pad - bottom };
     }
 
-    return { rect, photoRect, rotate: cell.rotate ?? 0, shape: cell.shape ?? 'rect', frame: cell.frame };
+    return { rect, photoRect, rotate: cell.rotate ?? 0, shape: cell.shape ?? 'rect', frame: cell.frame, poly: cell.poly };
   });
 }
 
@@ -139,9 +155,19 @@ function polygon(r: SkRect, points: number, innerRatio?: number): SkPath {
   return b.detach();
 }
 
-export function shapePath(shape: CellShape, r: SkRect, radius: number): SkPath {
+export function shapePath(shape: CellShape, r: SkRect, radius: number, poly?: [number, number][]): SkPath {
   const b = Skia.PathBuilder.Make();
   switch (shape) {
+    case 'poly': {
+      (poly ?? [[0, 0], [1, 0], [1, 1], [0, 1]]).forEach(([px, py], i) => {
+        const x = r.x + px * r.width;
+        const y = r.y + py * r.height;
+        if (i === 0) b.moveTo(x, y);
+        else b.lineTo(x, y);
+      });
+      b.close();
+      return b.detach();
+    }
     case 'circle':
       b.addOval(squareIn(r));
       return b.detach();
@@ -219,8 +245,11 @@ export interface CellDrawOptions {
   image: SkImage | null;
   transform: PhotoTransform;
   design: Design;
-  scale: number; // canvas width / 1080
+  /** slide width / 1080 */
+  unit: number;
   placeholder?: boolean;
+  /** Fill for empty cells (defaults to a soft lilac). */
+  placeholderColor?: string;
   selected?: boolean;
 }
 
@@ -229,22 +258,22 @@ export function drawCell(canvas: SkCanvas, cell: ResolvedCell, o: CellDrawOption
   canvas.save();
   if (cell.rotate) canvas.rotate(cell.rotate, rect.x + rect.width / 2, rect.y + rect.height / 2);
 
-  const radius = o.design.radius * o.scale;
+  const radius = o.design.radius * o.unit;
 
   if (cell.frame) {
-    const framePath = shapePath('rect', rect, Math.min(radius, 6 * o.scale));
+    const framePath = shapePath('rect', rect, Math.min(radius, 6 * o.unit));
     if (o.design.shadow) {
       const shadow = paint('#00000040');
-      shadow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, 10 * o.scale, true));
+      shadow.setMaskFilter(Skia.MaskFilter.MakeBlur(BlurStyle.Normal, 10 * o.unit, true));
       canvas.save();
-      canvas.translate(0, 6 * o.scale);
+      canvas.translate(0, 6 * o.unit);
       canvas.drawPath(framePath, shadow);
       canvas.restore();
     }
     canvas.drawPath(framePath, paint(cell.frame.color));
   }
 
-  const clip = shapePath(cell.shape, photoRect, radius);
+  const clip = shapePath(cell.shape, photoRect, radius, cell.poly);
 
   if (o.image) {
     canvas.save();
@@ -253,38 +282,70 @@ export function drawCell(canvas: SkCanvas, cell: ResolvedCell, o: CellDrawOption
     const ih = o.image.height();
     const dest = coverRect(iw, ih, photoRect, o.transform);
     // Trilinear (mipmapped) sampling gives clean, alias-free downscaling of large photos.
-    canvas.drawImageRectOptions(
-      o.image,
-      { x: 0, y: 0, width: iw, height: ih },
-      dest,
-      FilterMode.Linear,
-      MipmapMode.Linear,
-      null,
-    );
+    canvas.drawImageRectOptions(o.image, { x: 0, y: 0, width: iw, height: ih }, dest, FilterMode.Linear, MipmapMode.Linear, null);
     canvas.restore();
   } else if (o.placeholder) {
-    canvas.drawPath(clip, paint('#E9E6F2'));
+    canvas.drawPath(clip, paint(o.placeholderColor ?? '#E9E6F2'));
     const cx = photoRect.x + photoRect.width / 2;
     const cy = photoRect.y + photoRect.height / 2;
-    const arm = Math.min(photoRect.width, photoRect.height) * 0.12;
-    const plus = paint('#9A92B5');
+    const arm = Math.min(photoRect.width, photoRect.height) * 0.09;
+    const plus = paint('#00000030');
     plus.setStyle(PaintStyle.Stroke);
-    plus.setStrokeWidth(Math.max(2, arm * 0.22));
+    plus.setStrokeWidth(Math.max(1.5, arm * 0.22));
     canvas.drawLine(cx - arm, cy, cx + arm, cy, plus);
     canvas.drawLine(cx, cy - arm, cx, cy + arm, plus);
   }
 
   if (o.selected) {
-    const sel = paint('#7C4DFF');
+    const sel = paint('#A78BFA');
     sel.setStyle(PaintStyle.Stroke);
-    sel.setStrokeWidth(Math.max(3, 4 * o.scale));
+    sel.setStrokeWidth(3);
     canvas.drawPath(clip, sel);
   }
   canvas.restore();
 }
 
+/** Background for the WHOLE canvas, so gradients run continuously across slides. */
 export function drawBackground(canvas: SkCanvas, width: number, height: number, design: Design) {
-  canvas.drawRect({ x: 0, y: 0, width, height }, paint(design.background));
+  const p = paint(design.background);
+  if (design.gradient) {
+    const a = (design.gradientAngle * Math.PI) / 180;
+    const cx = width / 2;
+    const cy = height / 2;
+    const half = (Math.abs(Math.cos(a)) * width + Math.abs(Math.sin(a)) * height) / 2;
+    p.setShader(
+      Skia.Shader.MakeLinearGradient(
+        { x: cx - Math.cos(a) * half, y: cy - Math.sin(a) * half },
+        { x: cx + Math.cos(a) * half, y: cy + Math.sin(a) * half },
+        [Skia.Color(design.gradient[0]), Skia.Color(design.gradient[1])],
+        null,
+        TileMode.Clamp,
+      ),
+    );
+  }
+  canvas.drawRect({ x: 0, y: 0, width, height }, p);
+}
+
+/** Dashed slide edges, drawn on the preview only (never exported). */
+export function drawSeams(canvas: SkCanvas, width: number, height: number, cols: number, rows: number) {
+  if (cols * rows <= 1) return;
+  const shade = paint('#00000059');
+  shade.setStyle(PaintStyle.Stroke);
+  shade.setStrokeWidth(3);
+  const line = paint('#FFFFFFD9');
+  line.setStyle(PaintStyle.Stroke);
+  line.setStrokeWidth(1.25);
+  line.setPathEffect(Skia.PathEffect.MakeDash([6, 5], 0));
+  for (let c = 1; c < cols; c++) {
+    const x = (c * width) / cols;
+    canvas.drawLine(x, 0, x, height, shade);
+    canvas.drawLine(x, 0, x, height, line);
+  }
+  for (let r = 1; r < rows; r++) {
+    const y = (r * height) / rows;
+    canvas.drawLine(0, y, width, y, shade);
+    canvas.drawLine(0, y, width, y, line);
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -326,58 +387,124 @@ export async function loadPreviewImage(uri: string, maxSide = 1600): Promise<SkI
 export type ExportFormat = 'jpeg' | 'png';
 
 export interface ExportOptions {
-  width: number;
-  aspect: number; // width / height
+  /** Width of ONE slide in pixels. */
+  slideWidth: number;
+  /** Slide aspect ratio (width / height). */
+  aspect: number;
   format: ExportFormat;
   onProgress?: (fraction: number) => void;
 }
 
-export interface ExportResult {
+export interface SlideFile {
   uri: string;
-  width: number;
-  height: number;
+  /** 1-based slide number, left-to-right then top-to-bottom. */
+  index: number;
+  col: number;
+  row: number;
   bytes: number;
 }
 
-export async function exportCollage(
+export interface ExportResult {
+  slides: SlideFile[];
+  width: number;
+  height: number;
+  totalBytes: number;
+  format: ExportFormat;
+}
+
+/** Axis-aligned bounds of a (possibly rotated) cell. */
+function cellBounds(c: ResolvedCell): SkRect {
+  if (!c.rotate) return c.rect;
+  const cx = c.rect.x + c.rect.width / 2;
+  const cy = c.rect.y + c.rect.height / 2;
+  const r = Math.hypot(c.rect.width, c.rect.height) / 2;
+  return { x: cx - r, y: cy - r, width: r * 2, height: r * 2 };
+}
+
+const intersects = (a: SkRect, b: SkRect) =>
+  a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+
+export async function exportSlides(
   template: Template,
   design: Design,
   photos: (Photo | null)[],
   opts: ExportOptions,
 ): Promise<ExportResult> {
-  const width = Math.round(opts.width);
-  const height = Math.round(opts.width / opts.aspect);
-  // Raster (CPU) surface: no GPU texture size limits, deterministic output.
-  const surface = Skia.Surface.Make(width, height);
-  if (!surface) throw new Error(`Could not allocate a ${width}×${height} canvas.`);
-  const canvas = surface.getCanvas();
-  const scale = width / 1080;
+  const sw = Math.round(opts.slideWidth);
+  const sh = Math.round(opts.slideWidth / opts.aspect);
+  const W = sw * template.cols;
+  const H = sh * template.rows;
+  const unit = sw / 1080;
+  const cells = resolveCells(template, W, H, design, unit);
+  const bounds = cells.map(cellBounds);
 
-  drawBackground(canvas, width, height, design);
-  const cells = resolveCells(template, width, height, design);
-  const total = cells.length + 1;
+  const slideRects: { col: number; row: number; rect: SkRect }[] = [];
+  for (let row = 0; row < template.rows; row++)
+    for (let col = 0; col < template.cols; col++)
+      slideRects.push({ col, row, rect: { x: col * sw, y: row * sh, width: sw, height: sh } });
 
-  for (let i = 0; i < cells.length; i++) {
-    const photo = photos[i];
-    let image: SkImage | null = null;
-    if (photo) image = await decodeImage(photo.uri); // original, full resolution
-    drawCell(canvas, cells[i], { image, transform: photo?.transform ?? IDENTITY, design, scale, placeholder: false });
-    image?.dispose();
-    opts.onProgress?.((i + 1) / total);
-    // Yield so the progress UI can update between photos.
+  // The last slide each photo appears on, so decoded originals can be freed early.
+  const lastUse = new Map<string, number>();
+  slideRects.forEach((s, si) =>
+    cells.forEach((_, ci) => {
+      const p = photos[ci];
+      if (p && intersects(bounds[ci], s.rect)) lastUse.set(p.uri, si);
+    }),
+  );
+
+  const decoded = new Map<string, SkImage>();
+  const slides: SlideFile[] = [];
+  const ext = opts.format === 'png' ? 'png' : 'jpg';
+  const stamp = Date.now();
+
+  for (let si = 0; si < slideRects.length; si++) {
+    const { col, row, rect } = slideRects[si];
+    // Raster (CPU) surface: no GPU texture size limits, deterministic output.
+    const surface = Skia.Surface.Make(sw, sh);
+    if (!surface) throw new Error(`Could not allocate a ${sw}×${sh} canvas.`);
+    const canvas = surface.getCanvas();
+    canvas.translate(-rect.x, -rect.y);
+    drawBackground(canvas, W, H, design);
+
+    for (let ci = 0; ci < cells.length; ci++) {
+      if (!intersects(bounds[ci], rect)) continue;
+      const photo = photos[ci];
+      let image: SkImage | null = null;
+      if (photo) {
+        image = decoded.get(photo.uri) ?? null;
+        if (!image) {
+          image = await decodeImage(photo.uri); // original, full resolution
+          decoded.set(photo.uri, image);
+        }
+      }
+      drawCell(canvas, cells[ci], { image, transform: photo?.transform ?? IDENTITY, design, unit });
+    }
+
+    surface.flush();
+    const snapshot = surface.makeImageSnapshot();
+    const encoded =
+      opts.format === 'png' ? snapshot.encodeToBytes(ImageFormat.PNG, 100) : snapshot.encodeToBytes(ImageFormat.JPEG, 100);
+    snapshot.dispose();
+    surface.dispose();
+
+    const n = String(si + 1).padStart(2, '0');
+    const name = slideRects.length > 1 ? `collage-${stamp}-${n}` : `collage-${stamp}`;
+    const uri = await writeOutput(encoded, ext, name);
+    slides.push({ uri, index: si + 1, col, row, bytes: encoded.length });
+
+    for (const [u, last] of lastUse) {
+      if (last <= si && decoded.has(u)) {
+        decoded.get(u)!.dispose();
+        decoded.delete(u);
+      }
+    }
+    opts.onProgress?.((si + 1) / slideRects.length);
+    // Yield so the progress UI can update between slides.
     await new Promise((r) => setTimeout(r, 0));
   }
+  decoded.forEach((img) => img.dispose());
 
-  surface.flush();
-  const snapshot = surface.makeImageSnapshot();
-  const encoded =
-    opts.format === 'png' ? snapshot.encodeToBytes(ImageFormat.PNG, 100) : snapshot.encodeToBytes(ImageFormat.JPEG, 100);
-  snapshot.dispose();
-  surface.dispose();
-
-  const uri = await writeOutput(encoded, opts.format === 'png' ? 'png' : 'jpg');
-  opts.onProgress?.(1);
-  return { uri, width, height, bytes: encoded.length };
+  return { slides, width: sw, height: sh, totalBytes: slides.reduce((a, s) => a + s.bytes, 0), format: opts.format };
 }
 
 /** Hit-test a point (canvas pixels) against resolved cells; topmost first. */

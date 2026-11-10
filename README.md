@@ -8,20 +8,31 @@ A watermark-free Instagram collage maker for iOS and Android (Expo / React Nativ
 
 ## Features
 
-- **196 templates** in 9 categories: Grid, 2–6+ photo layouts, Shapes (heart, circle, hexagon honeycomb, star, diamond, arch, pill), Freestyle (polaroids, scatter, film strip, photo booth, inset) and Stories.
-- **Instagram aspect ratios:** 4:5 portrait, 1:1 square, 9:16 story/reel, 3:4 and 1.91:1 landscape.
-- **Editing:** tap a cell to add a photo, or fill every empty cell in one go. Drag to reposition, pinch to zoom. Swap, replace, remove and reset photos. Adjust spacing, outer border and corner rounding, choose from 24 background colors, and toggle frame shadows.
-- **High-quality export, no watermark:**
-  - Choose 1080, 2160 (default), 3240 or 4320 px wide.
-  - The export is rendered from your **original full-resolution photos**, not from the screen preview.
-  - Downscaling uses trilinear mipmapped sampling, so fine detail stays clean and sharp.
-  - Save as JPEG at quality 100 or as lossless PNG.
-  - The app warns you if a photo would have to be enlarged at the size you picked.
-  - Photos are decoded one at a time, so even 48 MP originals stay within phone memory.
-- **Saved to its own folder:** finished collages go to a **"Collage Studio"** album and never mix with your camera photos.
-  - Android: the `Pictures/Collage Studio` folder.
-  - iOS: Photos → Albums → Collage Studio.
-- **Post to Instagram:** one tap after saving.
+Four kinds of post, all exported without a watermark:
+
+| Mode | What you get | Designs |
+| --- | --- | --- |
+| **Single post** | One collage for the feed or Stories (4:5, 1:1, 9:16, 3:4, 1.91:1). | 196 layouts: grids, mosaics, shapes, polaroids, stories |
+| **Seamless carousel** | One continuous design across **2–20 slides** (Instagram's carousel limit). Photos and gradients flow across slide edges as you swipe. | Panorama, seam bridges, cascade, polaroid trail, bubble wave, film roll, brick wall… (12) |
+| **Split-screen carousel** | Every slide split into panels: side by side, top and bottom, diagonal, zigzag, triptych. "Across the seam" cuts each photo in half between two slides. | 10 |
+| **Panoramic profile grid** | One picture split into 3, 6, 9 or 12 posts that line up on your profile. Tiles export at **3:4 (1080 × 1440)**, the shape the profile grid shows, and are numbered in **posting order**. | 10 |
+
+![Multi-slide exports](docs/multi-preview.jpg)
+
+**Editor**
+- Carousels open in a swipe view (one slide plus a peek of the next), with numbered slides and dashed seams, or you can switch to see the whole strip at once.
+- Tap a cell to add a photo, or fill every empty cell at once. Drag to reposition, pinch or use the buttons to zoom, and swap, replace or remove photos.
+- Change the slide or row count at any time without losing your photos.
+- Spacing, border and corner sliders. Solid colors, or gradients that run continuously across all slides, with a choice of direction.
+- Undo and redo for every change.
+
+**Export**
+- Choose 1080 (Instagram's stored width), 2160 (default), 3240 or 4320 px per image, as JPEG at quality 100 or lossless PNG.
+- Each image is rendered from your **original full-resolution photos**, with trilinear sampling. Photos are decoded once and released after the last slide that needs them, so 20-slide carousels stay within phone memory.
+- The app warns you when a photo would have to be enlarged.
+- **Saved to its own folder:** a "Collage Studio" album (Android: `Pictures/Collage Studio`), never mixed with your camera photos.
+  - Carousel slides are saved in swipe order.
+  - Grid tiles are saved in posting order: the bottom-right tile is posted first, because the newest post shows top-left.
 
 ## Instagram connection: how it works and why
 
@@ -39,7 +50,9 @@ Instead, the saved collage goes to the real Instagram app through the operating 
 | Platform | What "Post to Instagram" does |
 | --- | --- |
 | iOS | Opens Instagram's composer with the collage already selected, using Instagram's official `instagram://library?LocalIdentifier=` link. |
-| Android | Opens the system share sheet. Instagram Feed, Story, Reels and Direct appear there when Instagram is installed. |
+| Android | Opens the system share sheet for a single image, or opens Instagram for a carousel or grid. |
+
+For carousels you choose "Select multiple" in Instagram and tap the slides in order from the Collage Studio album. Instagram's own deep link can only preselect one image.
 
 You stay signed in to Instagram itself, and this app never handles your credentials.
 
@@ -69,7 +82,7 @@ npx eas-cli@latest build --profile development --platform android
 
 ### Browser demo
 
-The same app also runs in a web browser, using Skia's WebAssembly build. In a browser, "Save" downloads the file, because there is no photo library to save into.
+The same app also runs in a web browser, using Skia's WebAssembly build. In a browser, "Save" downloads the image, or one ZIP for a carousel or grid, because there is no photo library to save into.
 
 ```bash
 npm run web         # dev server
@@ -86,13 +99,17 @@ npm run build:web   # static build in dist-web/
 ## Project layout
 
 ```
-App.tsx                    screen switching (template gallery ⇄ editor)
-src/templates.ts           all templates: grids, mosaics, shapes, freestyle, stories
-src/render.ts              Skia drawing shared by preview and export, plus full-res export
-src/share.ts               save to the "Collage Studio" album, hand-off to Instagram
-src/screens/Gallery.tsx    template browser with categories and aspect ratios
-src/screens/Editor.tsx     canvas, gestures, layout/ratio/spacing/color tools
-src/screens/ExportSheet.tsx export size and format, save, Post to Instagram
+App.tsx                    screen switching (home ⇄ editor)
+src/templates.ts           single-post templates and the layout helpers (H, V, L)
+src/multi.ts               carousel, split-screen and profile-grid templates
+src/project.ts             modes, ratios and Instagram limits
+src/render.ts              Skia drawing shared by preview and export; per-slide full-res export
+src/share.ts               save to the "Collage Studio" album in order, hand-off to Instagram
+src/icons.tsx              line icons drawn with Skia (no icon font needed)
+src/zip.ts                 ZIP writer for multi-image downloads on web
+src/screens/Home.tsx       mode picker, slide/row count, ratio, template browser
+src/screens/Editor.tsx     swipe/overview canvas, gestures, undo/redo, tool dock
+src/screens/ExportSheet.tsx size and format, slide previews, posting order, Instagram
 scripts/                   headless render harness (Node)
 ```
 

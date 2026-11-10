@@ -42,3 +42,4 @@ yarn-error.*
 samples/
 public/canvaskit.wasm
 dist-web/
+dist-web/app/
