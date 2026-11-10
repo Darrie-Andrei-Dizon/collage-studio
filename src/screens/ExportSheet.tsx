@@ -2,35 +2,35 @@ import React, { useMemo, useState } from 'react';
 import { Image, Modal, Platform, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Icon, type IconName } from '../icons';
+import { Icon } from '../icons';
 import { INSTAGRAM, outputLabel, postingStep } from '../project';
 import { coverRect, exportSlides, resolveCells, type Design, type ExportFormat, type ExportResult, type Photo } from '../render';
 import { ALBUM_NAME, openInstagram, saveOrder, saveOutputs, shareFile, type SavedCollage } from '../share';
 import type { Template } from '../templates';
-import { Button, Chip, IconButton, ProgressBar, T, theme } from '../ui';
+import { Button, haptic, ProgressBar, Row, Section, Segmented, T, ThemeProvider, useTheme } from '../ui';
 
 const SIZES = [
-  { width: 1080, label: 'Instagram', note: 'Exact size Instagram stores' },
-  { width: 2160, label: 'HD 2×', note: 'Recommended' },
-  { width: 3240, label: 'Ultra 3×', note: 'Print quality' },
-  { width: 4320, label: 'Max 4×', note: 'Largest files' },
+  { width: 1080, label: 'Instagram', note: 'The exact size Instagram stores' },
+  { width: 2160, label: 'High', note: 'Recommended' },
+  { width: 3240, label: 'Ultra', note: 'Print quality' },
+  { width: 4320, label: 'Maximum', note: 'Largest files' },
 ];
 
 type Stage = 'options' | 'working' | 'done';
 const isWeb = Platform.OS === 'web';
 
-function Note({ icon = 'info', color = theme.faint, children }: { icon?: IconName; color?: string; children: React.ReactNode }) {
+/** iOS sheets sit one level up: the sheet uses the elevated background, list rows the next shade. */
+export function ExportSheet(props: Parameters<typeof SheetBody>[0]) {
+  const c = useTheme();
+  const elevated = c.name === 'dark' ? { ...c, bg: '#1C1C1E', card: '#2C2C2E', segment: '#636366' } : c;
   return (
-    <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
-      <Icon name={icon} size={16} color={color} style={{ marginTop: 1 }} />
-      <T v="small" style={{ flex: 1, color: color === theme.faint ? theme.muted : color }}>
-        {children}
-      </T>
-    </View>
+    <ThemeProvider value={elevated}>
+      <SheetBody {...props} />
+    </ThemeProvider>
   );
 }
 
-export function ExportSheet({
+function SheetBody({
   visible,
   onClose,
   template,
@@ -45,6 +45,7 @@ export function ExportSheet({
   photos: (Photo | null)[];
   aspect: number;
 }) {
+  const c = useTheme();
   const insets = useSafeAreaInsets();
   const { width: winW, height: winH } = useWindowDimensions();
   const [size, setSize] = useState(2160);
@@ -57,7 +58,7 @@ export function ExportSheet({
   const n = template.cols * template.rows;
   const height = Math.round(size / aspect);
   const mime = format === 'png' ? 'image/png' : 'image/jpeg';
-  const sheetW = Math.min(winW, 640);
+  const sheetW = Math.min(winW, 600);
 
   // Warn when a photo would have to be enlarged at this output size.
   const upscaled = useMemo(() => {
@@ -87,6 +88,7 @@ export function ExportSheet({
       const saved = await saveOutputs(out, template);
       setResult({ out, saved });
       setStage('done');
+      haptic.success();
     } catch (e) {
       setStage('options');
       setError(String((e as Error).message ?? e));
@@ -111,7 +113,7 @@ export function ExportSheet({
     }
   };
 
-  const saveLabel = isWeb ? (n === 1 ? 'Download image' : `Download ZIP · ${n} images`) : n === 1 ? `Save to “${ALBUM_NAME}”` : `Save ${n} images to “${ALBUM_NAME}”`;
+  const saveLabel = isWeb ? (n === 1 ? 'Download Image' : `Download ${n} Images (ZIP)`) : n === 1 ? `Save to ${ALBUM_NAME}` : `Save ${n} Images`;
 
   /* ---------------- Output previews ---------------- */
 
@@ -119,17 +121,17 @@ export function ExportSheet({
     if (!result) return null;
     const { out } = result;
     if (template.mode === 'grid') {
-      const tile = Math.min(92, (sheetW - 40 - 12) / 3);
+      const tile = Math.min(96, (sheetW - 32 - 6) / 3);
       return (
-        <View style={{ alignSelf: 'center', width: tile * 3 + 12, flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <View style={{ alignSelf: 'center', width: tile * 3 + 6, flexDirection: 'row', flexWrap: 'wrap', gap: 3 }}>
           {out.slides.map((s) => {
             const step = postingStep(template, s.index);
             return (
               <View key={s.index}>
-                <Image source={{ uri: s.uri }} style={{ width: tile, height: tile / aspect, borderRadius: 4 }} />
-                <View style={{ position: 'absolute', left: 4, bottom: 4, backgroundColor: step === 1 ? theme.pink : 'rgba(11,10,16,0.78)', borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 }}>
-                  <T v="small" style={{ fontSize: 10, lineHeight: 14, color: step === 1 ? '#2A0B1C' : '#fff', fontWeight: '800' }}>
-                    Post {step}
+                <Image source={{ uri: s.uri }} style={{ width: tile, height: tile / aspect }} />
+                <View style={{ position: 'absolute', right: 4, bottom: 4, minWidth: 20, height: 20, paddingHorizontal: 5, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: step === 1 ? c.tint : 'rgba(0,0,0,0.6)' }}>
+                  <T v="caption2" weight="700" tone="white">
+                    {step}
                   </T>
                 </View>
               </View>
@@ -138,18 +140,16 @@ export function ExportSheet({
         </View>
       );
     }
-    const h = n === 1 ? Math.min(220, winH * 0.28) : 128;
+    const h = n === 1 ? Math.min(240, winH * 0.3) : 140;
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 2, justifyContent: n === 1 ? 'center' : 'flex-start', flexGrow: 1 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, justifyContent: n === 1 ? 'center' : 'flex-start', flexGrow: 1 }}>
         {out.slides.map((s) => (
-          <View key={s.index}>
-            <Image source={{ uri: s.uri }} style={{ width: h * aspect, height: h, borderRadius: 6 }} />
+          <View key={s.index} style={{ gap: 4, alignItems: 'center' }}>
+            <Image source={{ uri: s.uri }} style={{ width: h * aspect, height: h, borderRadius: 8 }} />
             {n > 1 && (
-              <View style={{ position: 'absolute', left: 5, top: 5, backgroundColor: 'rgba(11,10,16,0.78)', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 1 }}>
-                <T v="small" style={{ fontSize: 10.5, lineHeight: 15, color: '#fff', fontWeight: '800' }}>
-                  {s.index}/{n}
-                </T>
-              </View>
+              <T v="caption2" tone="secondary">
+                {s.index} of {n}
+              </T>
             )}
           </View>
         ))}
@@ -157,116 +157,103 @@ export function ExportSheet({
     );
   };
 
-  const howToPost = () => {
+  const steps = (): string[] => {
     if (template.mode === 'grid')
       return isWeb
-        ? `The ZIP names files in posting order. Post “post-01” first and “post-${String(n).padStart(2, '0')}” last, one at a time, and your profile shows the full picture.`
-        : `Post them one at a time, starting with “Post 1” (tile ${n}). They're saved in that order in “${ALBUM_NAME}”.`;
+        ? ['Unzip the download. Files are named in posting order.', 'Post “post-01” first, as its own post.', `Keep going one at a time until “post-${String(n).padStart(2, '0')}”.`]
+        : [`Open Instagram and post tile ${n} (marked 1) first.`, 'Post the rest one at a time, following the numbers.', 'After the last one, your profile shows the full picture.'];
     if (n > 1)
       return isWeb
-        ? `The ZIP holds slide-01 to slide-${String(n).padStart(2, '0')}. In Instagram, start a post, choose “Select multiple” and pick them in order.`
-        : `In Instagram, start a post, choose “Select multiple” and tap slides 1 to ${n} from “${ALBUM_NAME}” in order.`;
+        ? [`Unzip the download: slide-01 to slide-${String(n).padStart(2, '0')}.`, 'In Instagram, tap + and choose Select Multiple.', 'Pick the slides in order, then share.']
+        : ['Tap Open Instagram, then + and Select Multiple.', `Pick slides 1 to ${n} from the “${ALBUM_NAME}” album, in order.`, 'Add a caption and share.'];
     return isWeb
-      ? 'Upload it from the Instagram app or instagram.com. The phone app hands it to Instagram in one tap.'
-      : Platform.OS === 'android'
-        ? `Saved in Pictures/${ALBUM_NAME}, separate from your camera photos.`
-        : `Saved in Photos → Albums → ${ALBUM_NAME}.`;
+      ? ['Upload the image from the Instagram app or instagram.com.']
+      : [Platform.OS === 'android' ? `Saved in Pictures/${ALBUM_NAME}.` : `Saved in Photos → Albums → ${ALBUM_NAME}.`, 'Tap Open Instagram to post it.'];
   };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.6)' }} onPress={close} accessibilityLabel="Close export" />
-      <View
-        style={{
-          alignSelf: 'center',
-          width: sheetW,
-          maxHeight: winH * 0.9,
-          backgroundColor: theme.surface,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
-          borderWidth: 1,
-          borderColor: theme.border,
-          paddingBottom: insets.bottom + 16,
-        }}
-      >
-        <View style={{ alignSelf: 'center', width: 40, height: 4, borderRadius: 2, backgroundColor: theme.borderStrong, marginTop: 8 }} />
-        <ScrollView contentContainerStyle={{ padding: 20, paddingTop: 10, gap: 16 }}>
+      <Pressable style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' }} onPress={close} accessibilityLabel="Dismiss" />
+      <View style={{ alignSelf: 'center', width: sheetW, maxHeight: winH * 0.92, backgroundColor: c.bg, borderTopLeftRadius: 14, borderTopRightRadius: 14, paddingBottom: insets.bottom + 12 }}>
+        <View style={{ alignSelf: 'center', width: 36, height: 5, borderRadius: 3, backgroundColor: c.tertiary, marginTop: 6 }} />
+
+        {/* Sheet header */}
+        <View style={{ height: 50, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8 }}>
+          <View style={{ width: 80 }}>
+            {stage === 'options' && (
+              <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}>
+                <T v="body" tone="tint">
+                  Cancel
+                </T>
+              </Pressable>
+            )}
+          </View>
+          <T v="headline" style={{ flex: 1, textAlign: 'center' }}>
+            Export
+          </T>
+          <View style={{ width: 80, alignItems: 'flex-end' }}>
+            {stage === 'done' && (
+              <Pressable accessibilityRole="button" onPress={close} style={({ pressed }) => ({ padding: 8, opacity: pressed ? 0.5 : 1 })}>
+                <T v="headline" tone="tint">
+                  Done
+                </T>
+              </Pressable>
+            )}
+          </View>
+        </View>
+
+        <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 8, gap: 22 }}>
           {stage === 'options' && (
             <>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <View style={{ flex: 1 }}>
-                  <T v="title" style={{ fontSize: 22, lineHeight: 28 }}>
-                    Export
-                  </T>
-                  <T v="small">
-                    {outputLabel(template)} at {size} × {height} · rendered from your original photos
-                  </T>
+              <T v="footnote" tone="secondary" style={{ textAlign: 'center', marginTop: -4 }}>
+                {outputLabel(template)}, rendered from your original photos
+              </T>
+
+              <Section header={n > 1 ? 'Size of each image' : 'Size'} footer={`Instagram stores photos ${INSTAGRAM.storedWidth} px wide. A larger export gives its resizer more detail and leaves you a full-quality copy.`}>
+                {SIZES.map((s) => (
+                  <Row key={s.width} label={s.label} subtitle={`${s.width} × ${Math.round(s.width / aspect)} · ${s.note}`} checked={s.width === size} onPress={() => setSize(s.width)} />
+                ))}
+              </Section>
+
+              <Section header="Format" footer={format === 'png' ? 'Lossless PNG: every pixel exactly as rendered, larger files.' : 'JPEG at quality 100: visually identical, much smaller files.'}>
+                <View style={{ padding: 12 }}>
+                  <Segmented
+                    options={[
+                      { value: 'jpeg', label: 'JPEG' },
+                      { value: 'png', label: 'PNG' },
+                    ]}
+                    value={format}
+                    onChange={setFormat}
+                  />
                 </View>
-                <IconButton icon="close" label="Close" onPress={close} />
-              </View>
+              </Section>
 
-              <View style={{ gap: 8 }}>
-                <T v="label">{n > 1 ? 'Size of each image' : 'Size'}</T>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
-                  {SIZES.map((s) => {
-                    const on = s.width === size;
-                    return (
-                      <Pressable
-                        key={s.width}
-                        onPress={() => setSize(s.width)}
-                        accessibilityState={{ selected: on }}
-                        style={{ width: Math.floor((sheetW - 40 - 9) / 2), padding: 12, borderRadius: 16, gap: 2, backgroundColor: on ? theme.accentSoft : theme.surface2, borderWidth: 1.5, borderColor: on ? theme.accent : theme.border }}
-                      >
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <T v="body" style={{ fontWeight: '700' }}>
-                            {s.label}
-                          </T>
-                          {on && <Icon name="check" size={16} color={theme.accentHi} />}
-                        </View>
-                        <T v="small" style={{ fontVariant: ['tabular-nums'] }}>
-                          {s.width} × {Math.round(s.width / aspect)}
-                          {n > 1 ? ` × ${n}` : ''}
-                        </T>
-                        <T v="small" style={{ fontSize: 11, color: theme.faint }}>
-                          {s.note}
-                        </T>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              </View>
+              {(upscaled > 0 || (n > 1 && template.mode !== 'grid') || template.mode === 'grid') && (
+                <Section>
+                  {n > 1 && template.mode !== 'grid' && <Row icon="layers" iconBg={c.tint} label={`${n} of ${INSTAGRAM.maxSlides} slides`} subtitle="One carousel holds up to 20, all at the same ratio" />}
+                  {template.mode === 'grid' && <Row icon="grid" iconBg={c.tint} label="3:4 tiles" subtitle="The exact shape of the profile grid" />}
+                  {upscaled > 0 && (
+                    <Row icon="info" iconBg={c.orange} label={`${upscaled} ${upscaled > 1 ? 'photos' : 'photo'} will be enlarged`} subtitle="Choose a smaller size for the sharpest result" />
+                  )}
+                </Section>
+              )}
 
-              <View style={{ gap: 8 }}>
-                <T v="label">Format</T>
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <Chip label="JPEG · max quality" active={format === 'jpeg'} onPress={() => setFormat('jpeg')} />
-                  <Chip label="PNG · lossless" active={format === 'png'} onPress={() => setFormat('png')} />
-                </View>
-              </View>
-
-              <View style={{ gap: 10, backgroundColor: theme.surface2, borderRadius: 16, padding: 14 }}>
-                <Note>Instagram stores photos {INSTAGRAM.storedWidth} px wide. A larger export gives its resizer more detail and leaves you a full-quality copy.</Note>
-                {n > 1 && template.mode !== 'grid' && <Note icon="layers">One carousel holds up to {INSTAGRAM.maxSlides} slides, all at the same ratio.</Note>}
-                {template.mode === 'grid' && <Note icon="grid">Tiles are 3:4, the exact shape of the profile grid, so the seams line up.</Note>}
-                {upscaled > 0 && (
-                  <Note icon="info" color={theme.amber}>
-                    {upscaled} photo{upscaled > 1 ? 's are' : ' is'} smaller than {upscaled > 1 ? 'their spots' : 'its spot'} at this size and will be enlarged. Pick a smaller size for the sharpest result.
-                  </Note>
-                )}
-              </View>
-
-              {error && <Note color={theme.danger}>{error}</Note>}
-              <Button label={saveLabel} icon="download" onPress={run} />
+              {error && (
+                <T v="footnote" tone="red" style={{ textAlign: 'center' }}>
+                  {error}
+                </T>
+              )}
+              <Button label={saveLabel} onPress={run} />
             </>
           )}
 
           {stage === 'working' && (
-            <View style={{ paddingVertical: 36, gap: 14 }}>
-              <T v="title" style={{ textAlign: 'center' }}>
-                {n > 1 ? `Rendering image ${Math.min(n, Math.floor(progress * n) + 1)} of ${n}` : 'Rendering your collage'}
+            <View style={{ paddingVertical: 40, gap: 16 }}>
+              <T v="title3" style={{ textAlign: 'center' }}>
+                {n > 1 ? `Rendering ${Math.min(n, Math.floor(progress * n) + 1)} of ${n}` : 'Rendering'}
               </T>
-              <ProgressBar value={progress} height={6} />
-              <T v="small" style={{ textAlign: 'center' }}>
+              <ProgressBar value={progress} />
+              <T v="footnote" tone="secondary" style={{ textAlign: 'center' }}>
                 {size} × {height} from your full-resolution originals
               </T>
             </View>
@@ -274,36 +261,47 @@ export function ExportSheet({
 
           {stage === 'done' && result && (
             <>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(52,211,153,0.15)', alignItems: 'center', justifyContent: 'center' }}>
-                  <Icon name="check" size={22} color={theme.success} />
+              <View style={{ alignItems: 'center', gap: 6 }}>
+                <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: c.green, alignItems: 'center', justifyContent: 'center' }}>
+                  <Icon name="check" size={30} color="#FFFFFF" strokeWidth={3} />
                 </View>
-                <View style={{ flex: 1 }}>
-                  <T v="title">{isWeb ? 'Downloaded' : 'Saved'}</T>
-                  <T v="small">
-                    {n} × {result.out.width} × {result.out.height} {result.out.format.toUpperCase()} · {(result.out.totalBytes / 1024 / 1024).toFixed(1)} MB
-                  </T>
-                </View>
-                <IconButton icon="close" label="Close" onPress={close} />
+                <T v="title3">{isWeb ? 'Downloaded' : `Saved to ${ALBUM_NAME}`}</T>
+                <T v="footnote" tone="secondary">
+                  {n} × {result.out.width} × {result.out.height} {result.out.format.toUpperCase()} · {(result.out.totalBytes / 1024 / 1024).toFixed(1)} MB
+                </T>
               </View>
 
               {previews()}
 
-              <View style={{ backgroundColor: theme.surface2, borderRadius: 16, padding: 14 }}>
-                <Note icon="instagram">{howToPost()}</Note>
-              </View>
+              <Section header="How to post">
+                {steps().map((text, i) => (
+                  <View key={i} style={{ flexDirection: 'row', gap: 12, paddingHorizontal: 16, paddingVertical: 11, alignItems: 'flex-start' }}>
+                    <View style={{ width: 22, height: 22, borderRadius: 11, backgroundColor: c.tintSoft, alignItems: 'center', justifyContent: 'center' }}>
+                      <T v="caption" weight="700" tone="tint">
+                        {i + 1}
+                      </T>
+                    </View>
+                    <T v="subhead" style={{ flex: 1 }}>
+                      {text}
+                    </T>
+                  </View>
+                ))}
+              </Section>
 
-              {error && <Note color={theme.danger}>{error}</Note>}
+              {error && (
+                <T v="footnote" tone="red" style={{ textAlign: 'center' }}>
+                  {error}
+                </T>
+              )}
 
               {isWeb ? (
-                <Button label="Download again" icon="download" kind="secondary" onPress={again} />
+                <Button label="Download Again" icon="download" kind="tinted" onPress={again} />
               ) : (
                 <View style={{ gap: 10 }}>
-                  <Button label="Open Instagram" icon="instagram" kind="pink" onPress={toInstagram} />
-                  {n === 1 && <Button label="Share…" icon="share" kind="secondary" onPress={() => shareFile(saveOrder(result.out, template)[0].uri, mime)} />}
+                  <Button label="Open Instagram" icon="instagram" onPress={toInstagram} />
+                  {n === 1 && <Button label="Share…" icon="share" kind="gray" onPress={() => shareFile(saveOrder(result.out, template)[0].uri, mime)} />}
                 </View>
               )}
-              <Button label="Done" kind="ghost" onPress={close} />
             </>
           )}
         </ScrollView>

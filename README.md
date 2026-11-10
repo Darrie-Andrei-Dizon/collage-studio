@@ -14,10 +14,23 @@ Four kinds of post, all exported without a watermark:
 | --- | --- | --- |
 | **Single post** | One collage for the feed or Stories (4:5, 1:1, 9:16, 3:4, 1.91:1). | 196 layouts: grids, mosaics, shapes, polaroids, stories |
 | **Seamless carousel** | One continuous design across **2–20 slides** (Instagram's carousel limit). Photos and gradients flow across slide edges as you swipe. | Panorama, seam bridges, cascade, polaroid trail, bubble wave, film roll, brick wall… (12) |
+| **Slide-by-slide carousel** | A different layout on every slide (cover, grid, shape, polaroid, finale…), with some photos bridging two slides so the swipe stays connected. | Story mix, Rhythm 1·2·3·4, Magazine, Shape tour, Spotlight series, Scrapbook, Panorama breaks, Dynamic duo, Cover/grid/finale, Wave, Mosaic + bridges, Breathing room, Film diary, Editorial split (14) |
 | **Split-screen carousel** | Every slide split into panels: side by side, top and bottom, diagonal, zigzag, triptych. "Across the seam" cuts each photo in half between two slides. | 10 |
 | **Panoramic profile grid** | One picture split into 3, 6, 9 or 12 posts that line up on your profile. Tiles export at **3:4 (1080 × 1440)**, the shape the profile grid shows, and are numbered in **posting order**. | 10 |
 
 ![Multi-slide exports](docs/multi-preview.jpg)
+
+Slide-by-slide designs (each row is one carousel):
+
+![Slide-by-slide carousels](docs/slide-by-slide.jpg)
+
+**Design**
+
+The interface follows Apple's Human Interface Guidelines:
+- **Colors and type:** iOS system colors in light and dark, and the San Francisco type scale (Inter on non-Apple browsers).
+- **Controls:** segmented controls, grouped inset lists, iOS steppers, switches and sliders, a page control for slides, sheets with Cancel/Done, and haptic feedback.
+- **Appearance:** the template browser follows the system setting. The editor is always dark, like editing in Photos, so the colors in your collage read accurately.
+
 
 **Editor**
 - Carousels open in a swipe view (one slide plus a peek of the next), with numbered slides and dashed seams, or you can switch to see the whole strip at once.
@@ -101,13 +114,14 @@ npm run build:web   # static build in dist-web/
 ```
 App.tsx                    screen switching (home ⇄ editor)
 src/templates.ts           single-post templates and the layout helpers (H, V, L)
-src/multi.ts               carousel, split-screen and profile-grid templates
+src/multi.ts               seamless carousel, split-screen and profile-grid templates
+src/stories.ts             slide-by-slide carousels: a scene library and 14 designs
 src/project.ts             modes, ratios and Instagram limits
 src/render.ts              Skia drawing shared by preview and export; per-slide full-res export
 src/share.ts               save to the "Collage Studio" album in order, hand-off to Instagram
 src/icons.tsx              line icons drawn with Skia (no icon font needed)
 src/zip.ts                 ZIP writer for multi-image downloads on web
-src/screens/Home.tsx       mode picker, slide/row count, ratio, template browser
+src/screens/Home.tsx       large title, mode segmented control, grouped settings, templates
 src/screens/Editor.tsx     swipe/overview canvas, gestures, undo/redo, tool dock
 src/screens/ExportSheet.tsx size and format, slide previews, posting order, Instagram
 scripts/                   headless render harness (Node)

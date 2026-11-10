@@ -11,6 +11,7 @@
  *
  * Cells are generated in "slide units" and converted to 0..1 of the whole canvas.
  */
+import { MIXED } from './stories';
 import { H, L, layout, V, type Cell, type Node, type Template } from './templates';
 
 export const MIN_SLIDES = 2;
@@ -200,7 +201,10 @@ export function carouselTemplates(n: number): Template[] {
   if (!cache.has(key))
     cache.set(
       key,
-      CAROUSEL.map((d) => ({ id: `${d.id}-${n}`, baseId: d.id, name: d.name, category: 'Seamless', cells: d.gen(n), mode: 'carousel', cols: n, rows: 1 })),
+      [
+        ...CAROUSEL.map((d) => ({ ...d, category: 'Seamless' as const })),
+        ...MIXED.map((d) => ({ ...d, category: 'Slide by slide' as const })),
+      ].map((d) => ({ id: `${d.id}-${n}`, baseId: d.id, name: d.name, category: d.category, cells: d.gen(n), mode: 'carousel' as const, cols: n, rows: 1 })),
     );
   return cache.get(key)!;
 }
@@ -240,4 +244,4 @@ export function resize(t: Template, count: number): Template {
   return list.find((x) => x.baseId === t.baseId) ?? list[0];
 }
 
-export const DESIGN_COUNTS = { carousel: CAROUSEL.length, split: SPLIT.length, grid: GRID.length };
+export const DESIGN_COUNTS = { carousel: CAROUSEL.length + MIXED.length, split: SPLIT.length, grid: GRID.length, seamless: CAROUSEL.length, mixed: MIXED.length };

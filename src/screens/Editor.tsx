@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { gradientUri, Icon, type IconName } from '../icons';
 import { resize } from '../multi';
-import { aspectsFor, countOf, countRange, INSTAGRAM, modeTitle, outputLabel, ratioOf, templatesFor } from '../project';
+import { aspectsFor, countOf, countRange, INSTAGRAM, outputLabel, ratioOf, templatesFor } from '../project';
 import {
   clampTransform,
   coverRect,
@@ -22,7 +22,7 @@ import {
   type Photo,
 } from '../render';
 import type { AspectId, Template } from '../templates';
-import { Button, Chip, IconButton, ProgressBar, Slider, Stepper, T, TemplateThumb, theme, Toast, ToolButton } from '../ui';
+import { Button, haptic, IconButton, IOSSwitch, PageDots, ProgressBar, Segmented, Slider, Stepper, T, TemplateThumb, Toast, ToolbarItem, useTheme } from '../ui';
 import { ExportSheet } from './ExportSheet';
 
 const SOLIDS = ['#FFFFFF', '#F5F0E6', '#000000', '#1F1D24', '#FADADD', '#E8DAEF', '#D6EAF8', '#D5F5E3', '#FCF3CF', '#FAD7A0', '#F1948A', '#BB8FCE', '#85C1E9', '#82E0AA', '#8B5CF6', '#EC4899', '#0EA5E9', '#14B8A6', '#F97316', '#7F1D1D', '#1E3A8A', '#14532D'];
@@ -72,6 +72,7 @@ async function pickPhotos(limit: number): Promise<ImagePicker.ImagePickerAsset[]
 
 export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemplate: Template; initialAspect: AspectId; onBack: () => void }) {
   const insets = useSafeAreaInsets();
+  const c = useTheme();
 
   /* ---------------- Document + undo/redo ---------------- */
 
@@ -278,7 +279,10 @@ export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemp
     if (!photos[i]) {
       setSelected(i);
       pickInto(i);
-    } else setSelected(i === selected ? -1 : i);
+    } else {
+      haptic.select();
+      setSelected(i === selected ? -1 : i);
+    }
   };
 
   const commitRef = useRef(commit);
@@ -381,40 +385,55 @@ export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemp
   const badges: React.ReactNode[] = [];
   if (slides > 1)
     for (let r = 0; r < template.rows; r++)
-      for (let c = 0; c < template.cols; c++) {
-        const left = c * slideW - scrollX;
+      for (let col = 0; col < template.cols; col++) {
+        const left = col * slideW - scrollX;
         if (left + slideW < 0 || left > viewW) continue;
         badges.push(
-          <View key={`${r}-${c}`} pointerEvents="none" style={{ position: 'absolute', left: left + 6, top: r * (slideW / ratio) + 6, backgroundColor: 'rgba(11,10,16,0.72)', borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-            <T v="small" style={{ color: '#fff', fontSize: 10.5, lineHeight: 14, fontWeight: '700' }}>
-              {r * template.cols + c + 1}
+          <View key={`${r}-${col}`} pointerEvents="none" style={{ position: 'absolute', left: left + 6, top: r * (slideW / ratio) + 6, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 999, minWidth: 20, paddingHorizontal: 6, height: 20, alignItems: 'center', justifyContent: 'center' }}>
+            <T v="caption2" weight="700" tone="white">
+              {r * template.cols + col + 1}
             </T>
           </View>,
         );
       }
 
+  const panelLabel = (text: string) => (
+    <T v="caption" tone="secondary" style={{ width: 74 }}>
+      {text}
+    </T>
+  );
+
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
-      {/* Top bar */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 6, gap: 2 }}>
-        <IconButton icon="back" label="Back to templates" onPress={onBack} />
-        <View style={{ flex: 1, paddingHorizontal: 4 }}>
-          <T v="body" numberOfLines={1} style={{ fontWeight: '700' }}>
+    <View style={{ flex: 1, backgroundColor: c.stage, paddingTop: insets.top }}>
+      {/* Navigation bar */}
+      <View style={{ height: 52, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to templates" onPress={onBack} hitSlop={6} style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 6, height: 44, opacity: pressed ? 0.5 : 1 })}>
+          <Icon name="back" size={24} color={c.tint} strokeWidth={2.2} />
+          <T v="body" tone="tint">
+            Templates
+          </T>
+        </Pressable>
+        <View style={{ flex: 1, alignItems: 'center', paddingHorizontal: 4 }}>
+          <T v="headline" numberOfLines={1}>
             {template.name}
           </T>
-          <T v="small" numberOfLines={1} style={{ fontSize: 11.5 }}>
-            {modeTitle(template.mode)} · {outputLabel(template)} · {aspectId}
+          <T v="caption2" tone="secondary" numberOfLines={1}>
+            {outputLabel(template)} · {aspectId}
           </T>
         </View>
-        <IconButton icon="undo" label="Undo" disabled={!past.current.length} onPress={undo} />
-        <IconButton icon="redo" label="Redo" disabled={!future.current.length} onPress={redo} />
-        <Button label="Export" icon="download" compact onPress={() => setExporting(true)} disabled={filled === 0} style={{ marginLeft: 6 }} />
+        <IconButton icon="undo" label="Undo" size={38} disabled={!past.current.length} onPress={undo} />
+        <IconButton icon="redo" label="Redo" size={38} disabled={!future.current.length} onPress={redo} />
+        <Pressable accessibilityRole="button" accessibilityLabel="Export" disabled={filled === 0} onPress={() => { haptic.tap(); setExporting(true); }} style={({ pressed }) => ({ paddingHorizontal: 10, height: 44, justifyContent: 'center', opacity: filled === 0 ? 0.35 : pressed ? 0.5 : 1 })}>
+          <T v="headline" tone="tint">
+            Export
+          </T>
+        </Pressable>
       </View>
 
       {/* Stage */}
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 }} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width - 32, h: e.nativeEvent.layout.height - 24 })}>
         {area.w > 0 && (
-          <View style={{ width: viewW, height: canvasH, borderRadius: 4, overflow: 'hidden' }} {...responder.panHandlers}>
+          <View style={{ width: viewW, height: canvasH, overflow: 'hidden' }} {...responder.panHandlers}>
             <Canvas style={{ width: viewW, height: canvasH }} pointerEvents="none">
               <Picture picture={picture} />
             </Canvas>
@@ -422,90 +441,76 @@ export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemp
           </View>
         )}
         {loading && (
-          <View style={{ position: 'absolute', backgroundColor: 'rgba(11,10,16,0.8)', padding: 18, borderRadius: 16 }}>
+          <View style={{ position: 'absolute', backgroundColor: 'rgba(44,44,46,0.92)', padding: 20, borderRadius: 14 }}>
             <ActivityIndicator color="#fff" />
           </View>
         )}
         <Toast message={toast} />
       </View>
 
-      {/* Slide navigator */}
+      {/* Slides: page dots, like swiping a real carousel */}
       {scrollable && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 4 }}>
-          <IconButton icon="back" label="Previous slide" size={34} disabled={view === 'fit' || currentSlide === 0} onPress={() => goTo(currentSlide - 1)} />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingHorizontal: 4, alignItems: 'center' }} style={{ flex: 1 }}>
-            {Array.from({ length: template.cols }, (_, i) => {
-              const on = view === 'focus' && i === currentSlide;
-              return (
-                <Pressable
-                  key={i}
-                  accessibilityLabel={`Go to slide ${i + 1}`}
-                  onPress={() => {
-                    setView('focus');
-                    goTo(i);
-                  }}
-                  style={{ minWidth: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: on ? theme.accent : theme.surface2, borderWidth: 1, borderColor: on ? theme.accent : theme.border }}
-                >
-                  <T v="small" style={[{ fontSize: 12, fontWeight: '700', color: on ? '#fff' : theme.muted }]}>
-                    {i + 1}
-                  </T>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          <IconButton icon="next" label="Next slide" size={34} disabled={view === 'fit' || currentSlide >= template.cols - 1} onPress={() => goTo(currentSlide + 1)} />
-          <IconButton icon={view === 'fit' ? 'focus' : 'overview'} label={view === 'fit' ? 'Swipe view' : 'See all slides'} size={34} active={view === 'fit'} onPress={() => setView(view === 'fit' ? 'focus' : 'fit')} />
+        <View style={{ height: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 }}>
+          <View style={{ width: 44 }} />
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <PageDots
+              count={template.cols}
+              index={view === 'focus' ? currentSlide : -1}
+              onSelect={(i) => {
+                setView('focus');
+                goTo(i);
+              }}
+            />
+          </View>
+          <IconButton icon={view === 'fit' ? 'focus' : 'overview'} label={view === 'fit' ? 'Swipe view' : 'See all slides'} size={40} active={view === 'fit'} onPress={() => setView(view === 'fit' ? 'focus' : 'fit')} />
         </View>
       )}
       {template.mode === 'grid' && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 20 }}>
-          <Icon name="info" size={14} color={theme.faint} />
-          <T v="small" style={{ flex: 1, fontSize: 12 }}>
-            Tiles are numbered left to right. Post tile {slides} first and tile 1 last, so the picture lines up on your profile.
-          </T>
-        </View>
+        <T v="footnote" tone="secondary" style={{ textAlign: 'center', paddingHorizontal: 24 }}>
+          Post tile {slides} first and tile 1 last so the picture lines up on your profile.
+        </T>
       )}
 
-      {/* Context bar */}
-      <View style={{ minHeight: 64, justifyContent: 'center', paddingHorizontal: 12 }}>
+      {/* Context row */}
+      <View style={{ minHeight: 64, justifyContent: 'center', paddingHorizontal: 8 }}>
         {sel ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 2, alignItems: 'center', paddingHorizontal: 4 }}>
-            <ToolButton icon="replace" label="Replace" onPress={() => pickInto(selected)} />
-            <ToolButton icon="zoomOut" label="Zoom out" onPress={() => updatePhoto(selected, (p) => ({ ...p, transform: clampTransform({ ...p.transform, scale: p.transform.scale / 1.15 }) }))} />
-            <ToolButton icon="zoomIn" label="Zoom in" onPress={() => updatePhoto(selected, (p) => ({ ...p, transform: clampTransform({ ...p.transform, scale: p.transform.scale * 1.15 }) }))} />
-            <ToolButton icon="reset" label="Reset" onPress={() => updatePhoto(selected, (p) => ({ ...p, transform: IDENTITY }))} />
-            {cellCount > 1 && <ToolButton icon="swap" label="Swap" onPress={() => swapWithNext(selected)} />}
-            <ToolButton
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', paddingHorizontal: 4, flexGrow: 1, justifyContent: 'center' }}>
+            <ToolbarItem icon="replace" label="Replace" onPress={() => pickInto(selected)} />
+            <ToolbarItem icon="zoomOut" label="Zoom Out" onPress={() => updatePhoto(selected, (p) => ({ ...p, transform: clampTransform({ ...p.transform, scale: p.transform.scale / 1.15 }) }))} />
+            <ToolbarItem icon="zoomIn" label="Zoom In" onPress={() => updatePhoto(selected, (p) => ({ ...p, transform: clampTransform({ ...p.transform, scale: p.transform.scale * 1.15 }) }))} />
+            <ToolbarItem icon="reset" label="Reset" onPress={() => updatePhoto(selected, (p) => ({ ...p, transform: IDENTITY }))} />
+            {cellCount > 1 && <ToolbarItem icon="swap" label="Swap" onPress={() => swapWithNext(selected)} />}
+            <ToolbarItem
               icon="trash"
               label="Remove"
-              danger
+              destructive
               onPress={() => {
                 updatePhoto(selected, () => null);
                 setSelected(-1);
-                say('Photo removed');
+                say('Photo Removed');
               }}
             />
-            <ToolButton icon="close" label="Done" onPress={() => setSelected(-1)} />
+            <ToolbarItem icon="close" label="Done" onPress={() => setSelected(-1)} />
           </ScrollView>
         ) : (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 8 }}>
             <View style={{ flex: 1, gap: 6 }}>
-              <T v="small">
-                <T v="small" style={{ color: theme.text, fontWeight: '700' }}>
+              <T v="footnote" tone="secondary">
+                <T v="footnote" weight="600">
                   {filled} of {cellCount}
                 </T>{' '}
-                photos placed · tap a cell, drag to move, pinch to zoom
+                photos · tap to add, drag to move, pinch to zoom
               </T>
               <ProgressBar value={filled / Math.max(1, cellCount)} />
             </View>
-            <Button label={emptyCells.length ? `Add ${emptyCells.length}` : 'Replace all'} icon="photos" kind={emptyCells.length ? 'primary' : 'secondary'} compact onPress={fillAll} />
+            <Button label={emptyCells.length ? `Add ${emptyCells.length}` : 'Replace All'} icon="photos" kind={emptyCells.length ? 'filled' : 'gray'} size="medium" onPress={fillAll} />
           </View>
         )}
       </View>
 
-      {/* Tool panel + dock */}
-      <View style={{ backgroundColor: theme.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderTopWidth: 1, borderColor: theme.border, paddingBottom: insets.bottom + 6 }}>
-        <View style={{ height: 132, justifyContent: 'center' }}>
+      {/* Inspector panel + toolbar */}
+      <View style={{ backgroundColor: c.card, borderTopLeftRadius: 16, borderTopRightRadius: 16, paddingBottom: insets.bottom + 2 }}>
+        <View style={{ height: 128, justifyContent: 'center' }}>
           {tab === 'layouts' && (
             <FlatList
               key={`${template.mode}-${countOf(template)}`}
@@ -521,13 +526,17 @@ export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemp
                 return (
                   <Pressable
                     accessibilityLabel={`${item.name} layout`}
-                    onPress={() => setTemplate(item)}
-                    style={{ width: itemW, marginRight: 8, padding: 6, borderRadius: 14, alignItems: 'center', gap: 6, backgroundColor: on ? theme.accentSoft : 'transparent', borderWidth: 1.5, borderColor: on ? theme.accent : 'transparent' }}
+                    accessibilityState={{ selected: on }}
+                    onPress={() => {
+                      haptic.select();
+                      setTemplate(item);
+                    }}
+                    style={{ width: itemW, marginRight: 8, alignItems: 'center', gap: 6 }}
                   >
-                    <View style={{ height: 76, justifyContent: 'center' }}>
-                      <TemplateThumb template={item} aspect={ratio} maxW={itemW - 12} maxH={76} />
+                    <View style={{ height: 80, width: itemW, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 2, borderColor: on ? c.tint : 'transparent' }}>
+                      <TemplateThumb template={item} aspect={ratio} maxW={itemW - 10} maxH={70} />
                     </View>
-                    <T v="small" numberOfLines={1} style={{ fontSize: 10.5, color: on ? theme.text : theme.muted }}>
+                    <T v="caption2" numberOfLines={1} tone={on ? 'tint' : 'secondary'} weight={on ? '600' : '400'}>
                       {item.name}
                     </T>
                   </Pressable>
@@ -536,108 +545,92 @@ export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemp
             />
           )}
           {tab === 'slides' && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 20 }}>
-              <Stepper
-                value={countOf(template)}
-                min={lo}
-                max={hi}
-                suffix={template.mode === 'grid' ? `rows · ${template.rows * 3} posts` : 'slides'}
-                onChange={setCount}
-              />
-              <T v="small" style={{ flex: 1 }}>
-                {template.mode === 'grid'
-                  ? 'Each row is 3 posts on your profile. Tiles export at 3:4, the shape the profile grid shows.'
-                  : `Instagram carousels hold ${INSTAGRAM.minSlides}–${INSTAGRAM.maxSlides} slides. Your photos stay put when you change the count.`}
+            <View style={{ paddingHorizontal: 20, gap: 10 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View style={{ flex: 1 }}>
+                  <T v="headline">{template.mode === 'grid' ? `${template.rows} ${template.rows === 1 ? 'Row' : 'Rows'}` : `${template.cols} Slides`}</T>
+                  <T v="footnote" tone="secondary">
+                    {template.mode === 'grid' ? `${template.rows * 3} posts on your profile` : `Instagram allows ${INSTAGRAM.minSlides}–${INSTAGRAM.maxSlides}`}
+                  </T>
+                </View>
+                <Stepper value={countOf(template)} min={lo} max={hi} label={template.mode === 'grid' ? 'rows' : 'slides'} onChange={setCount} />
+              </View>
+              <T v="caption" tone="secondary">
+                {template.mode === 'grid' ? 'Tiles export at 3:4, the shape the profile grid shows.' : 'Your photos stay in place when you change the count.'}
               </T>
             </View>
           )}
           {tab === 'ratio' && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}>
-              {aspectsFor(template.mode).map((a) => {
-                const on = a.id === aspectId;
-                const w = a.ratio >= 1 ? 40 : 40 * a.ratio;
-                const h = a.ratio >= 1 ? 40 / a.ratio : 40;
-                return (
-                  <Pressable
-                    key={a.id}
-                    onPress={() => change((d) => ({ ...d, aspectId: a.id }))}
-                    style={{ width: 92, height: 100, borderRadius: 16, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: on ? theme.accentSoft : theme.surface2, borderWidth: 1.5, borderColor: on ? theme.accent : theme.border }}
-                  >
-                    <View style={{ width: w, height: h, borderRadius: 4, borderWidth: 2, borderColor: on ? theme.accentHi : theme.muted }} />
-                    <View style={{ alignItems: 'center' }}>
-                      <T v="small" style={{ color: theme.text, fontWeight: '700' }}>
-                        {a.label}
-                      </T>
-                      <T v="small" style={{ fontSize: 10.5 }}>
-                        {a.hint}
-                      </T>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </ScrollView>
+            <View style={{ paddingHorizontal: 20, gap: 12 }}>
+              <Segmented options={aspectsFor(template.mode).map((a) => ({ value: a.id, label: a.label }))} value={aspectId} onChange={(id) => change((d) => ({ ...d, aspectId: id }))} />
+              <T v="footnote" tone="secondary" style={{ textAlign: 'center' }}>
+                {aspectsFor(template.mode).find((a) => a.id === aspectId)?.hint}
+                {template.mode !== 'post' ? ' · every slide uses this ratio' : ''}
+              </T>
+            </View>
           )}
           {tab === 'spacing' && (
-            <View style={{ paddingHorizontal: 20, gap: 10 }}>
-              <View style={{ flexDirection: 'row', gap: 18, flexWrap: 'wrap' }}>
+            <View style={{ paddingHorizontal: 20, gap: 4 }}>
+              <View style={{ flexDirection: 'row', gap: 20 }}>
                 <Slider label="Spacing" value={design.gap} min={0} max={80} onStart={commit} onChange={(gap) => setDesign({ gap }, false)} />
                 <Slider label="Border" value={design.margin} min={0} max={120} onStart={commit} onChange={(margin) => setDesign({ margin }, false)} />
               </View>
-              <View style={{ flexDirection: 'row', gap: 18, alignItems: 'flex-end' }}>
+              <View style={{ flexDirection: 'row', gap: 20, alignItems: 'center' }}>
                 <Slider label="Corners" value={design.radius} min={0} max={160} onStart={commit} onChange={(radius) => setDesign({ radius }, false)} />
-                <Chip label="Shadows" icon={design.shadow ? 'check' : 'close'} active={design.shadow} onPress={() => setDesign({ shadow: !design.shadow })} />
+                <View style={{ flex: 1, minWidth: 140, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <T v="subhead">Frame Shadows</T>
+                  <IOSSwitch label="Frame shadows" value={design.shadow} onChange={(shadow) => setDesign({ shadow })} />
+                </View>
               </View>
             </View>
           )}
           {tab === 'background' && (
             <View style={{ gap: 10 }}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}>
-                <T v="label" style={{ width: 82 }}>
-                  Gradient
-                </T>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, alignItems: 'center' }}>
+                {panelLabel('Gradient')}
                 {GRADIENTS.map((g) => {
                   const on = design.gradient?.join() === g.colors.join();
                   return (
-                    <Pressable key={g.name} accessibilityLabel={`${g.name} gradient`} onPress={() => setDesign({ gradient: g.colors })} style={{ padding: 2, borderRadius: 22, borderWidth: 2, borderColor: on ? theme.accent : 'transparent' }}>
-                      <Image source={{ uri: gradientUri(g.colors, 36, 36, 45, 18) }} style={{ width: 36, height: 36, borderRadius: 18 }} />
+                    <Pressable key={g.name} accessibilityLabel={`${g.name} gradient`} accessibilityState={{ selected: on }} onPress={() => { haptic.select(); setDesign({ gradient: g.colors }); }} style={{ padding: 2, borderRadius: 20, borderWidth: 2, borderColor: on ? c.tint : 'transparent' }}>
+                      <Image source={{ uri: gradientUri(g.colors, 32, 32, 45, 16) }} style={{ width: 32, height: 32, borderRadius: 16 }} />
                     </Pressable>
                   );
                 })}
               </ScrollView>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 10, alignItems: 'center' }}>
-                <T v="label" style={{ width: 82 }}>
-                  Solid
-                </T>
-                {SOLIDS.map((c) => {
-                  const on = !design.gradient && design.background === c;
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 20, gap: 10, alignItems: 'center' }}>
+                {panelLabel('Color')}
+                {SOLIDS.map((col) => {
+                  const on = !design.gradient && design.background === col;
                   return (
-                    <Pressable key={c} accessibilityLabel={`Background ${c}`} onPress={() => setDesign({ background: c, gradient: null })} style={{ padding: 2, borderRadius: 22, borderWidth: 2, borderColor: on ? theme.accent : 'transparent' }}>
-                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: c, borderWidth: 1, borderColor: theme.borderStrong }} />
+                    <Pressable key={col} accessibilityLabel={`Background ${col}`} accessibilityState={{ selected: on }} onPress={() => { haptic.select(); setDesign({ background: col, gradient: null }); }} style={{ padding: 2, borderRadius: 20, borderWidth: 2, borderColor: on ? c.tint : 'transparent' }}>
+                      <View style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: col, borderWidth: 0.5, borderColor: c.separator }} />
                     </Pressable>
                   );
                 })}
               </ScrollView>
               {design.gradient && (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: 16, gap: 8, alignItems: 'center' }}>
-                  <T v="label" style={{ width: 82 }}>
-                    Direction
-                  </T>
-                  {[
-                    { a: 0, l: 'Across →' },
-                    { a: 45, l: 'Diagonal ↘' },
-                    { a: 90, l: 'Down ↓' },
-                    { a: 180, l: 'Reverse ←' },
-                  ].map((o) => (
-                    <Chip key={o.a} label={o.l} active={design.gradientAngle === o.a} onPress={() => setDesign({ gradientAngle: o.a })} />
-                  ))}
-                </ScrollView>
+                <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, gap: 10 }}>
+                  {panelLabel('Direction')}
+                  <Segmented
+                    compact
+                    style={{ flex: 1 }}
+                    options={[
+                      { value: 0, label: '→' },
+                      { value: 45, label: '↘' },
+                      { value: 90, label: '↓' },
+                      { value: 180, label: '←' },
+                    ]}
+                    value={design.gradientAngle}
+                    onChange={(gradientAngle) => setDesign({ gradientAngle })}
+                  />
+                </View>
               )}
             </View>
           )}
         </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingTop: 4, paddingHorizontal: 8, borderTopWidth: 1, borderColor: theme.border }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-around', paddingTop: 4, paddingHorizontal: 8, borderTopWidth: 0.5, borderColor: c.separator }}>
           {tabs.map((t) => (
-            <ToolButton key={t} icon={TAB_META[t].icon} label={TAB_META[t].label} active={tab === t} onPress={() => setTab(t)} />
+            <ToolbarItem key={t} icon={TAB_META[t].icon} label={TAB_META[t].label} active={tab === t} onPress={() => setTab(t)} />
           ))}
         </View>
       </View>

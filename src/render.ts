@@ -102,7 +102,24 @@ export function resolveCells(
 
   return template.cells.map((cell) => {
     let rect: SkRect;
-    if (cell.free) {
+    if (cell.scope && !cell.free) {
+      // Layout cell inside one slide: margin and spacing are applied relative to that slide.
+      const [sx, sy, sw, sh] = cell.scope;
+      const ax = sx * width + margin;
+      const ay = sy * height + margin;
+      const aw = sw * width - margin * 2;
+      const ah = sh * height - margin * 2;
+      const l = cell.x < EPS ? 0 : gap / 2;
+      const t = cell.y < EPS ? 0 : gap / 2;
+      const r = cell.x + cell.w > 1 - EPS ? 0 : gap / 2;
+      const b = cell.y + cell.h > 1 - EPS ? 0 : gap / 2;
+      rect = {
+        x: ax + cell.x * aw + l,
+        y: ay + cell.y * ah + t,
+        width: Math.max(1, cell.w * aw - l - r),
+        height: Math.max(1, cell.h * ah - t - b),
+      };
+    } else if (cell.free) {
       rect = { x: cell.x * width, y: cell.y * height, width: cell.w * width, height: cell.h * height };
     } else {
       const x0 = margin + cell.x * areaW;

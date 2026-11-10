@@ -18,7 +18,7 @@ export const INSTAGRAM = {
 
 export const MODES: { id: Mode; title: string; blurb: string; icon: IconName }[] = [
   { id: 'post', title: 'Single post', blurb: 'One image for feed or Stories', icon: 'image' },
-  { id: 'carousel', title: 'Seamless carousel', blurb: 'A panorama that flows as you swipe', icon: 'layers' },
+  { id: 'carousel', title: 'Carousel', blurb: 'Up to 20 slides, seamless or a new layout on every slide', icon: 'layers' },
   { id: 'split', title: 'Split-screen', blurb: 'Panels and photos cut across slides', icon: 'columns' },
   { id: 'grid', title: 'Profile grid', blurb: 'One picture across 3–12 posts', icon: 'grid' },
 ];

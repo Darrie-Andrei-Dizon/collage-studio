@@ -2,11 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { FlatList, Pressable, ScrollView, useWindowDimensions, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Icon } from '../icons';
 import { DESIGN_COUNTS } from '../multi';
 import { aspectsFor, countRange, INSTAGRAM, MODES, ratioOf, templatesFor } from '../project';
-import { CATEGORIES, TEMPLATES, type AspectId, type Category, type Mode, type Template } from '../templates';
-import { Chip, Stepper, T, TemplateThumb, theme } from '../ui';
+import { CATEGORIES, type AspectId, type Category, type Mode, type Template } from '../templates';
+import { haptic, Row, Section, Segmented, Stepper, T, TemplateThumb, useTheme } from '../ui';
 
 export interface HomeState {
   mode: Mode;
@@ -14,176 +13,161 @@ export interface HomeState {
   aspects: Record<Mode, AspectId>;
 }
 
-const POST_CATEGORIES = CATEGORIES.filter((c) => !['Seamless', 'Split screen', 'Profile grid'].includes(c));
+const POST_CATEGORIES = CATEGORIES.filter((c) => !['Seamless', 'Split screen', 'Profile grid', 'Slide by slide'].includes(c));
+const SHORT: Record<Mode, string> = { post: 'Post', carousel: 'Carousel', split: 'Split', grid: 'Grid' };
+type CarouselFilter = 'all' | 'seamless' | 'mixed';
 
 export function Home({ state, onChange, onPick }: { state: HomeState; onChange: (s: HomeState) => void; onPick: (t: Template, aspect: AspectId) => void }) {
+  const c = useTheme();
   const insets = useSafeAreaInsets();
   const { width: winW } = useWindowDimensions();
   const [category, setCategory] = useState<Category | 'All'>('All');
+  const [filter, setFilter] = useState<CarouselFilter>('all');
   const { mode } = state;
   const count = state.counts[mode];
   const aspectId = state.aspects[mode];
   const aspect = ratioOf(aspectId);
 
-  const width = Math.min(winW, 760);
+  const width = Math.min(winW, 720);
   const pad = 16;
 
   const data = useMemo(() => {
     const list = templatesFor(mode, count);
-    return mode === 'post' && category !== 'All' ? list.filter((t) => t.category === category) : list;
-  }, [mode, count, category]);
+    if (mode === 'post') return category === 'All' ? list : list.filter((t) => t.category === category);
+    if (mode === 'carousel' && filter !== 'all') return list.filter((t) => (filter === 'seamless' ? t.category === 'Seamless' : t.category === 'Slide by slide'));
+    return list;
+  }, [mode, count, category, filter]);
 
   const cols = mode === 'post' ? (width > 560 ? 4 : 3) : mode === 'grid' ? (width > 560 ? 3 : 2) : 1;
-  const gap = 10;
+  const gap = 12;
   const cardW = (width - pad * 2 - gap * (cols - 1)) / cols;
   const [lo, hi] = countRange(mode);
   const set = (patch: Partial<HomeState>) => onChange({ ...state, ...patch });
+  const info = MODES.find((m) => m.id === mode)!;
+  const ratios = aspectsFor(mode);
 
   const header = (
-    <View style={{ gap: 18, paddingBottom: 14 }}>
-      {/* Brand */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingTop: 8 }}>
-        <View style={{ width: 40, height: 40, borderRadius: 12, backgroundColor: theme.surface2, padding: 6, flexDirection: 'row', flexWrap: 'wrap', gap: 3 }}>
-          {['#C4B5FD', '#F9A8D4', '#FDBA74', '#93C5FD'].map((c) => (
-            <View key={c} style={{ width: 12.5, height: 12.5, borderRadius: 3.5, backgroundColor: c }} />
-          ))}
-        </View>
-        <View style={{ flex: 1 }}>
-          <T v="display" style={{ fontSize: 24, lineHeight: 28 }}>
-            Collage Studio
-          </T>
-          <T v="small">Full-resolution export · never a watermark</T>
-        </View>
-      </View>
-
-      {/* Mode picker */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-        {MODES.map((m) => {
-          const active = m.id === mode;
-          const n = m.id === 'post' ? TEMPLATES.length : DESIGN_COUNTS[m.id];
-          return (
-            <Pressable
-              key={m.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected: active }}
-              onPress={() => set({ mode: m.id })}
-              style={({ pressed }) => ({
-                width: (width - pad * 2 - 10) / 2,
-                padding: 14,
-                borderRadius: 18,
-                gap: 10,
-                backgroundColor: active ? theme.accentSoft : theme.surface,
-                borderWidth: 1.5,
-                borderColor: active ? theme.accent : theme.border,
-                opacity: pressed ? 0.85 : 1,
-              })}
-            >
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <View style={{ width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? theme.accent : theme.surface3 }}>
-                  <Icon name={m.icon} size={18} color="#fff" />
-                </View>
-                <T v="small" style={{ fontSize: 11, color: active ? theme.accentHi : theme.faint, fontWeight: '700' }}>
-                  {m.id === 'post' ? `${n} layouts` : `${n} designs`}
-                </T>
-              </View>
-              <View>
-                <T v="body" style={{ fontWeight: '700' }}>
-                  {m.title}
-                </T>
-                <T v="small" numberOfLines={2}>
-                  {m.blurb}
-                </T>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Setup for the chosen mode */}
-      <View style={{ backgroundColor: theme.surface, borderRadius: 18, borderWidth: 1, borderColor: theme.border, padding: 14, gap: 14 }}>
-        {mode !== 'post' && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
-            <Stepper
-              value={count}
-              min={lo}
-              max={hi}
-              suffix={mode === 'grid' ? `${count === 1 ? 'row' : 'rows'} · ${count * 3} posts` : 'slides'}
-              onChange={(v) => set({ counts: { ...state.counts, [mode]: v } })}
-            />
-            <View style={{ flex: 1, flexDirection: 'row', gap: 8 }}>
-              <Icon name="info" size={15} color={theme.faint} style={{ marginTop: 1 }} />
-              <T v="small" style={{ flex: 1 }}>
-                {mode === 'grid'
-                  ? 'Your profile grid shows posts at 3:4, so tiles export at 1080 × 1440 and line up exactly.'
-                  : `Instagram carousels hold ${INSTAGRAM.minSlides}–${INSTAGRAM.maxSlides} slides.`}
-              </T>
-            </View>
-          </View>
-        )}
-        <View style={{ gap: 8 }}>
-          <T v="label">{mode === 'post' ? 'Ratio' : 'Slide ratio'}</T>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-            {aspectsFor(mode).map((a) => (
-              <Chip key={a.id} label={`${a.label} · ${a.hint}`} active={a.id === aspectId} onPress={() => set({ aspects: { ...state.aspects, [mode]: a.id } })} />
-            ))}
-          </ScrollView>
-        </View>
-      </View>
-
-      {mode === 'post' ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
-          {(['All', ...POST_CATEGORIES] as const).map((c) => (
-            <Chip key={c} label={c} active={c === category} onPress={() => setCategory(c)} />
-          ))}
-        </ScrollView>
-      ) : (
-        <T v="label">
-          {data.length} designs · {mode === 'grid' ? `${count * 3} tiles` : `${count} slides`}
+    <View style={{ gap: 20, paddingBottom: 12 }}>
+      <View style={{ paddingTop: 12, paddingHorizontal: 4 }}>
+        <T v="largeTitle">Collage Studio</T>
+        <T v="subhead" tone="secondary">
+          Full-resolution export. Never a watermark.
         </T>
+      </View>
+
+      <View style={{ gap: 8 }}>
+        <Segmented options={MODES.map((m) => ({ value: m.id, label: SHORT[m.id] }))} value={mode} onChange={(m) => set({ mode: m })} />
+        <T v="footnote" tone="secondary" style={{ paddingHorizontal: 4 }}>
+          {info.title}: {info.blurb.charAt(0).toLowerCase() + info.blurb.slice(1)}.
+        </T>
+      </View>
+
+      <Section
+        footer={
+          mode === 'grid'
+            ? 'Your profile grid shows posts at 3:4, so tiles export at 1080 × 1440 and line up exactly.'
+            : mode === 'post'
+              ? undefined
+              : `Instagram allows ${INSTAGRAM.minSlides} to ${INSTAGRAM.maxSlides} slides in one carousel.`
+        }
+      >
+        {mode !== 'post' && (
+          <Row
+            label={mode === 'grid' ? 'Rows' : 'Slides'}
+            detail={mode === 'grid' ? `${count} · ${count * 3} posts` : String(count)}
+            accessory={<Stepper value={count} min={lo} max={hi} label={mode === 'grid' ? 'rows' : 'slides'} onChange={(v) => set({ counts: { ...state.counts, [mode]: v } })} />}
+          />
+        )}
+        {ratios.length > 1 ? (
+          <View style={{ paddingHorizontal: 16, paddingVertical: 10, gap: 8 }}>
+            <T v="body">{mode === 'post' ? 'Aspect ratio' : 'Slide ratio'}</T>
+            <Segmented compact options={ratios.map((a) => ({ value: a.id, label: a.label }))} value={aspectId} onChange={(a) => set({ aspects: { ...state.aspects, [mode]: a } })} />
+          </View>
+        ) : (
+          <Row label="Tile ratio" detail="3:4 · Profile grid" />
+        )}
+      </Section>
+
+      {mode === 'carousel' && (
+        <Segmented
+          options={[
+            { value: 'all', label: `All ${DESIGN_COUNTS.carousel}` },
+            { value: 'seamless', label: 'Seamless' },
+            { value: 'mixed', label: 'Slide by slide' },
+          ]}
+          value={filter}
+          onChange={setFilter}
+        />
       )}
+      {mode === 'post' && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {(['All', ...POST_CATEGORIES] as const).map((cat) => {
+            const on = cat === category;
+            return (
+              <Pressable
+                key={cat}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                onPress={() => {
+                  haptic.select();
+                  setCategory(cat);
+                }}
+                style={{ height: 32, paddingHorizontal: 14, borderRadius: 999, justifyContent: 'center', backgroundColor: on ? c.label : c.fill }}
+              >
+                <T v="subhead" weight="600" style={{ color: on ? c.bg : c.label }}>
+                  {cat}
+                </T>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      )}
+
+      <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingHorizontal: 4 }}>
+        <T v="title3">Templates</T>
+        <T v="footnote" tone="secondary">
+          {data.length} {mode === 'grid' ? `· ${count * 3} tiles` : mode === 'post' ? '' : `· ${count} slides`}
+        </T>
+      </View>
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg, paddingTop: insets.top }}>
+    <View style={{ flex: 1, backgroundColor: c.bg, paddingTop: insets.top }}>
       <FlatList
         key={`${mode}-${cols}`}
         data={data}
+        extraData={c.name}
         numColumns={cols}
         keyExtractor={(t) => t.id}
-        initialNumToRender={12}
+        initialNumToRender={10}
         windowSize={7}
         ListHeaderComponent={header}
         style={{ alignSelf: 'center', width }}
         contentContainerStyle={{ paddingHorizontal: pad, paddingBottom: insets.bottom + 32 }}
-        columnWrapperStyle={cols > 1 ? { gap, marginBottom: gap } : undefined}
+        columnWrapperStyle={cols > 1 ? { gap, marginBottom: gap + 4 } : undefined}
         renderItem={({ item }) => {
-          const thumbH = mode === 'post' ? cardW - 20 : mode === 'grid' ? cardW * 1.1 : Math.min(150, (cardW - 20) / (item.cols * aspect));
+          const thumbH = mode === 'post' ? cardW - 16 : mode === 'grid' ? cardW * 1.1 : Math.min(150, (cardW - 24) / (item.cols * aspect));
           return (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`${item.name} template`}
-              onPress={() => onPick(item, aspectId)}
-              style={({ pressed }) => ({
-                width: cardW,
-                marginBottom: cols === 1 ? gap : 0,
-                backgroundColor: pressed ? theme.surface2 : theme.surface,
-                borderRadius: 16,
-                borderWidth: 1,
-                borderColor: theme.border,
-                padding: 10,
-                gap: 8,
-              })}
+              onPress={() => {
+                haptic.tap();
+                onPick(item, aspectId);
+              }}
+              style={({ pressed }) => ({ width: cardW, marginBottom: cols === 1 ? gap + 4 : 0, gap: 6, opacity: pressed ? 0.6 : 1 })}
             >
-              <View style={{ alignItems: 'center', justifyContent: 'center', height: thumbH }}>
-                <TemplateThumb template={item} aspect={aspect} maxW={cardW - 20} maxH={thumbH} />
+              <View style={{ backgroundColor: c.card, borderRadius: 12, height: thumbH + (cols === 1 ? 24 : 16), alignItems: 'center', justifyContent: 'center' }}>
+                <TemplateThumb template={item} aspect={aspect} maxW={cardW - (cols === 1 ? 24 : 16)} maxH={thumbH} />
               </View>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 2 }}>
-                <T v="small" numberOfLines={1} style={{ color: theme.text, fontWeight: '600', flex: 1 }}>
+              <View style={{ paddingHorizontal: 2 }}>
+                <T v={cols === 1 ? 'subhead' : 'footnote'} weight="600" numberOfLines={1}>
                   {item.name}
                 </T>
-                <T v="small" style={{ fontSize: 11 }}>
+                <T v="caption" tone="secondary" numberOfLines={1}>
                   {item.cells.length} {item.cells.length === 1 ? 'photo' : 'photos'}
+                  {item.category === 'Slide by slide' ? ' · each slide different' : ''}
                 </T>
               </View>
             </Pressable>

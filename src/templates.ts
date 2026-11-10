@@ -36,6 +36,12 @@ export interface Cell {
   frame?: { pad: number; bottom: number; color: string };
   /** For shape 'poly': polygon points in 0..1 of the cell rect. */
   poly?: [number, number][];
+  /**
+   * Lay this cell out inside one region of the canvas (x, y, w, h in 0..1 of the canvas),
+   * usually a single slide. x/y/w/h are then relative to that region, and the border and
+   * spacing sliders apply per slide.
+   */
+  scope?: [number, number, number, number];
 }
 
 export type Category =
@@ -50,7 +56,8 @@ export type Category =
   | 'Stories'
   | 'Seamless'
   | 'Split screen'
-  | 'Profile grid';
+  | 'Profile grid'
+  | 'Slide by slide';
 
 /** What gets exported: one image, a swipeable carousel, or tiles for the profile grid. */
 export type Mode = 'post' | 'carousel' | 'split' | 'grid';
