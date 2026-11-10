@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <!-- viewport-fit=cover + user-scalable=no: full-screen on iPhone, and pinches go to the collage, not the page -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>%WEB_TITLE%</title>
+
+    <!-- Home-screen web app (iOS "Add to Home Screen", Android "Install app") -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Collage" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" />
+
+    <style id="expo-reset">
+      :root { --bg: #F2F2F7; --fg: #000000; }
+      @media (prefers-color-scheme: dark) { :root { --bg: #000000; --fg: #FFFFFF; color-scheme: dark; } }
+      html, body { height: 100%; background: var(--bg); color: var(--fg); }
+      body {
+        margin: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+        -webkit-font-smoothing: antialiased;
+        -webkit-tap-highlight-color: transparent;
+        -webkit-touch-callout: none;
+        -webkit-user-select: none;
+        user-select: none;
+      }
+      #root { display: flex; height: 100%; flex: 1; }
+    </style>
+  </head>
+  <body>
+    <noscript>Collage Studio needs JavaScript to run.</noscript>
+    <div id="root"></div>
+  </body>
+</html>

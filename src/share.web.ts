@@ -75,6 +75,44 @@ export async function saveOutputs(result: ExportResult, template: Template): Pro
   return result.slides.map(() => ({ asset: null, album: null }));
 }
 
+function fileName(template: Template, index: number, n: number, ext: string) {
+  const pad = (v: number) => String(v).padStart(2, '0');
+  if (n === 1) return `Collage Studio.${ext}`;
+  return template.mode === 'grid' ? `post-${pad(postingStep(template, index))}-of-${pad(n)}_tile-${pad(index)}.${ext}` : `slide-${pad(index)}-of-${pad(n)}.${ext}`;
+}
+
+/**
+ * On phones (iPhone Safari, home-screen web app, Android Chrome) the share sheet can
+ * take the images directly: "Save Image(s)" puts them in Photos, or pick Instagram.
+ * Returns the files ready to share, or null where the browser can't share files.
+ * Safari only opens the share sheet from a tap, so call shareFiles() from onPress.
+ */
+export async function prepareShare(result: ExportResult, template: Template): Promise<File[] | null> {
+  const nav = navigator as Navigator & { canShare?(d: ShareData): boolean };
+  // Inside claude.ai the page can't open the share sheet; it saves through the host instead.
+  if ((globalThis as { claude?: unknown }).claude || !nav.share || !nav.canShare) return null;
+  const ext = result.format === 'png' ? 'png' : 'jpg';
+  const type = result.format === 'png' ? 'image/png' : 'image/jpeg';
+  const n = result.slides.length;
+  const files = await Promise.all(
+    saveOrder(result, template).map(async (s) => new File([await (await fetch(s.uri)).blob()], fileName(template, s.index, n, ext), { type })),
+  );
+  try {
+    return nav.canShare({ files }) ? files : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function shareFiles(files: File[]) {
+  try {
+    await navigator.share({ files });
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') return; // the user closed the share sheet
+    throw e;
+  }
+}
+
 export async function shareFile(_fileUri: string, _mime: string) {
   throw new Error('Sharing to apps is available in the phone app.');
 }

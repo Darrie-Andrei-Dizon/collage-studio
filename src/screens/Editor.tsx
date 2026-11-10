@@ -433,7 +433,7 @@ export function Editor({ initialTemplate, initialAspect, onBack }: { initialTemp
       {/* Stage */}
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 12 }} onLayout={(e) => setArea({ w: e.nativeEvent.layout.width - 32, h: e.nativeEvent.layout.height - 24 })}>
         {area.w > 0 && (
-          <View style={{ width: viewW, height: canvasH, overflow: 'hidden' }} {...responder.panHandlers}>
+          <View style={[{ width: viewW, height: canvasH, overflow: 'hidden' }, Platform.OS === 'web' ? ({ touchAction: 'none' } as object) : null]} {...responder.panHandlers}>
             <Canvas style={{ width: viewW, height: canvasH }} pointerEvents="none">
               <Picture picture={picture} />
             </Canvas>

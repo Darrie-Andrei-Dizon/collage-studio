@@ -9,6 +9,11 @@ if (Platform.OS === 'web') {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { LoadSkiaWeb } = require('@shopify/react-native-skia/lib/module/web');
   // canvaskit.wasm is served next to index.html (copied into public/ by `npm run build:web`).
+  // Offline support when installed as a home-screen web app (pages that ship the
+  // manifest, i.e. GitHub Pages; the claude.ai demo page doesn't).
+  if ('serviceWorker' in navigator && document.querySelector('link[rel="manifest"]')) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
   LoadSkiaWeb({ locateFile: (file: string) => file })
     .then(start)
     .catch((e: unknown) => {

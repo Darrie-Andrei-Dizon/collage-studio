@@ -30,7 +30,8 @@
     "web": "mkdir -p public && cp node_modules/canvaskit-wasm/bin/full/canvaskit.wasm public/ && expo start --web",
     "render:samples": "mkdir -p samples && esbuild scripts/render-samples.ts --bundle --platform=node --outfile=node_modules/.cache/render-samples.js --alias:@shopify/react-native-skia=./scripts/headless/skia-shim.js --alias:expo-file-system=./scripts/headless/fs-shim.js --external:canvaskit-wasm --log-level=warning && OUT_DIR=$PWD/samples node node_modules/.cache/render-samples.js",
     "typecheck": "tsc --noEmit",
-    "build:web": "mkdir -p public && cp node_modules/canvaskit-wasm/bin/full/canvaskit.wasm public/ && expo export --platform web --output-dir dist-web"
+    "build:web": "mkdir -p public && cp node_modules/canvaskit-wasm/bin/full/canvaskit.wasm public/ && expo export --platform web --output-dir dist-web",
+    "build:pages": "mkdir -p public && cp node_modules/canvaskit-wasm/bin/full/canvaskit.wasm public/ && expo export --platform web --output-dir dist-web && touch dist-web/.nojekyll"
   },
   "private": true
 }

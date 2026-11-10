@@ -93,6 +93,19 @@ You can also build in the cloud without a local toolchain, using [EAS](https://d
 npx eas-cli@latest build --profile development --platform android
 ```
 
+### Install on iPhone (no App Store needed)
+
+The web version is published automatically to **https://darrie-andrei-dizon.github.io/collage-studio/** on every push to `main` (see `.github/workflows/pages.yml`).
+
+1. Open the link in **Safari** on your iPhone.
+2. Tap **Share** → **Add to Home Screen** → **Add**.
+3. Open **Collage** from your home screen. It runs full screen and works offline after the first visit.
+
+When you export, tap **Save to Photos** and choose **Save Image(s)**, or pick Instagram from the share sheet. Compared with the native app:
+- **No album:** images go to Recents. A web app can't create its own "Collage Studio" album.
+- **No haptics:** taps don't vibrate.
+- **Smaller maximum size:** the largest export is 3240 px, because Safari limits a page's memory.
+
 ### Browser demo
 
 The same app also runs in a web browser, using Skia's WebAssembly build. In a browser, "Save" downloads the image, or one ZIP for a carousel or grid, because there is no photo library to save into.

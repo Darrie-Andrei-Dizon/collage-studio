@@ -96,3 +96,10 @@ export async function openInstagram(result: ExportResult, saved: SavedCollage[],
     await Linking.openURL('https://www.instagram.com/');
   }
 }
+
+/** The phone app saves straight into its album, so the web share-sheet flow isn't used. */
+export async function prepareShare(_result: ExportResult, _template: Template): Promise<File[] | null> {
+  return null;
+}
+
+export async function shareFiles(_files: File[]) {}

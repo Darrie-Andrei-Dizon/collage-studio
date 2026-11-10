@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Icon } from '../icons';
 import { INSTAGRAM, outputLabel, postingStep } from '../project';
 import { coverRect, exportSlides, resolveCells, type Design, type ExportFormat, type ExportResult, type Photo } from '../render';
-import { ALBUM_NAME, openInstagram, saveOrder, saveOutputs, shareFile, type SavedCollage } from '../share';
+import { ALBUM_NAME, openInstagram, prepareShare, saveOrder, saveOutputs, shareFile, shareFiles, type SavedCollage } from '../share';
 import type { Template } from '../templates';
 import { Button, haptic, ProgressBar, Row, Section, Segmented, T, ThemeProvider, useTheme } from '../ui';
 
@@ -18,6 +18,10 @@ const SIZES = [
 
 type Stage = 'options' | 'working' | 'done';
 const isWeb = Platform.OS === 'web';
+/** Phone browsers and home-screen web apps can hand images to the share sheet (Save Image, Instagram…). */
+const webCanShare = isWeb && typeof navigator !== 'undefined' && !!navigator.share && 'canShare' in navigator && !(globalThis as { claude?: unknown }).claude;
+/** Safari limits a page's memory, so the browser version skips the 4× size. */
+const SIZE_OPTIONS = isWeb ? SIZES.slice(0, 3) : SIZES;
 
 /** iOS sheets sit one level up: the sheet uses the elevated background, list rows the next shade. */
 export function ExportSheet(props: Parameters<typeof SheetBody>[0]) {
@@ -54,6 +58,7 @@ function SheetBody({
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<{ out: ExportResult; saved: SavedCollage[] } | null>(null);
+  const [shareReady, setShareReady] = useState<File[] | null>(null);
 
   const n = template.cols * template.rows;
   const height = Math.round(size / aspect);
@@ -75,6 +80,7 @@ function SheetBody({
     if (stage === 'working') return;
     setStage('options');
     setResult(null);
+    setShareReady(null);
     setError(null);
     onClose();
   };
@@ -85,7 +91,11 @@ function SheetBody({
     setProgress(0);
     try {
       const out = await exportSlides(template, design, photos, { slideWidth: size, aspect, format, onProgress: setProgress });
-      const saved = await saveOutputs(out, template);
+      // Browsers that can share files get a "Save to Photos" button (the share sheet has to
+      // open from a tap); everywhere else the images are saved or downloaded right away.
+      const files = isWeb ? await prepareShare(out, template) : null;
+      const saved = files ? [] : await saveOutputs(out, template);
+      setShareReady(files);
       setResult({ out, saved });
       setStage('done');
       haptic.success();
@@ -113,7 +123,14 @@ function SheetBody({
     }
   };
 
-  const saveLabel = isWeb ? (n === 1 ? 'Download Image' : `Download ${n} Images (ZIP)`) : n === 1 ? `Save to ${ALBUM_NAME}` : `Save ${n} Images`;
+  const saveLabel = webCanShare
+    ? n === 1
+      ? 'Create Image'
+      : `Create ${n} Images`
+    : isWeb
+      ? n === 1
+        ? 'Download Image'
+        : `Download ${n} Images (ZIP)` : n === 1 ? `Save to ${ALBUM_NAME}` : `Save ${n} Images`;
 
   /* ---------------- Output previews ---------------- */
 
@@ -158,6 +175,12 @@ function SheetBody({
   };
 
   const steps = (): string[] => {
+    if (shareReady) {
+      if (template.mode === 'grid')
+        return ['Tap Save to Photos, then Save Images.', `In Instagram, post the tile numbered 1 first (bottom right), on its own.`, `Keep going in order up to ${n}; your profile then shows the full picture.`];
+      if (n > 1) return [`Tap Save to Photos, then Save ${n} Images.`, 'In Instagram, tap + and choose Select Multiple.', `Pick slides 1 to ${n} in order from Recents, then share.`];
+      return ['Tap Save to Photos, then Save Image. Or pick Instagram in the share sheet to post right away.'];
+    }
     if (template.mode === 'grid')
       return isWeb
         ? ['Unzip the download. Files are named in posting order.', 'Post “post-01” first, as its own post.', `Keep going one at a time until “post-${String(n).padStart(2, '0')}”.`]
@@ -210,7 +233,7 @@ function SheetBody({
               </T>
 
               <Section header={n > 1 ? 'Size of each image' : 'Size'} footer={`Instagram stores photos ${INSTAGRAM.storedWidth} px wide. A larger export gives its resizer more detail and leaves you a full-quality copy.`}>
-                {SIZES.map((s) => (
+                {SIZE_OPTIONS.map((s) => (
                   <Row key={s.width} label={s.label} subtitle={`${s.width} × ${Math.round(s.width / aspect)} · ${s.note}`} checked={s.width === size} onPress={() => setSize(s.width)} />
                 ))}
               </Section>
@@ -265,7 +288,7 @@ function SheetBody({
                 <View style={{ width: 56, height: 56, borderRadius: 28, backgroundColor: c.green, alignItems: 'center', justifyContent: 'center' }}>
                   <Icon name="check" size={30} color="#FFFFFF" strokeWidth={3} />
                 </View>
-                <T v="title3">{isWeb ? 'Downloaded' : `Saved to ${ALBUM_NAME}`}</T>
+                <T v="title3">{shareReady ? (n === 1 ? 'Your image is ready' : `${n} images are ready`) : isWeb ? 'Downloaded' : `Saved to ${ALBUM_NAME}`}</T>
                 <T v="footnote" tone="secondary">
                   {n} × {result.out.width} × {result.out.height} {result.out.format.toUpperCase()} · {(result.out.totalBytes / 1024 / 1024).toFixed(1)} MB
                 </T>
@@ -294,7 +317,12 @@ function SheetBody({
                 </T>
               )}
 
-              {isWeb ? (
+              {shareReady ? (
+                <View style={{ gap: 10 }}>
+                  <Button label="Save to Photos" icon="share" onPress={() => shareFiles(shareReady).catch((e) => setError(String((e as Error).message ?? e)))} />
+                  <Button label={n === 1 ? 'Download Instead' : 'Download ZIP Instead'} icon="download" kind="gray" onPress={again} />
+                </View>
+              ) : isWeb ? (
                 <Button label="Download Again" icon="download" kind="tinted" onPress={again} />
               ) : (
                 <View style={{ gap: 10 }}>
