@@ -67,6 +67,15 @@ You can also build in the cloud without a local toolchain, using [EAS](https://d
 npx eas-cli@latest build --profile development --platform android
 ```
 
+### Browser demo
+
+The same app also runs in a web browser, using Skia's WebAssembly build. In a browser, "Save" downloads the file, because there is no photo library to save into.
+
+```bash
+npm run web         # dev server
+npm run build:web   # static build in dist-web/
+```
+
 ### Useful scripts
 
 | Command | What it does |
@@ -93,4 +102,4 @@ Templates are plain data in normalized 0–1 coordinates. To add one, push a new
 
 - Instagram recompresses everything it receives. Exporting at 2160 px (2×) gives its resizer the most detail to work with. Use 1080 px if you want an exact pixel match with Instagram's feed.
 - On iOS, a saved collage also appears in the "Recents" view, as every photo does. It still sits in its own "Collage Studio" album. If you grant only *limited* photo access, iOS may hide the album, and the app then falls back to a normal save.
-- Web isn't supported. The app targets iOS and Android.
+- The browser version is a demo. Saving into a dedicated album and posting to Instagram need the phone app.

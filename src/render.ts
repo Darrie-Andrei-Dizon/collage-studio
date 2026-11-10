@@ -20,8 +20,8 @@ import {
   type SkPath,
   type SkRect,
 } from '@shopify/react-native-skia';
-import { File, Paths } from 'expo-file-system';
 
+import { writeOutput } from './output';
 import type { Cell, CellShape, Template } from './templates';
 
 /** Values are in pixels at a 1080 px wide canvas and scale with the output size. */
@@ -375,12 +375,9 @@ export async function exportCollage(
   snapshot.dispose();
   surface.dispose();
 
-  const ext = opts.format === 'png' ? 'png' : 'jpg';
-  const file = new File(Paths.cache, `collage-${Date.now()}.${ext}`);
-  file.create({ overwrite: true });
-  await file.write(encoded);
+  const uri = await writeOutput(encoded, opts.format === 'png' ? 'png' : 'jpg');
   opts.onProgress?.(1);
-  return { uri: file.uri, width, height, bytes: encoded.length };
+  return { uri, width, height, bytes: encoded.length };
 }
 
 /** Hit-test a point (canvas pixels) against resolved cells; topmost first. */

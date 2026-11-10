@@ -26,7 +26,10 @@
       "package": "com.collagestudio.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single",
+      "backgroundColor": "#0F0D16"
     },
     "plugins": [
       [

@@ -36,6 +36,7 @@ export function ExportSheet({
   const [format, setFormat] = useState<ExportFormat>('jpeg');
   const [stage, setStage] = useState<Stage>('options');
   const [progress, setProgress] = useState(0);
+  const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<(ExportResult & { saved: SavedCollage }) | null>(null);
 
   const height = Math.round(size / aspect);
@@ -61,6 +62,7 @@ export function ExportSheet({
 
   const run = async () => {
     setStage('working');
+    setError(null);
     setProgress(0);
     try {
       const out = await exportCollage(template, design, photos, { width: size, aspect, format, onProgress: setProgress });
@@ -69,7 +71,8 @@ export function ExportSheet({
       setStage('done');
     } catch (e) {
       setStage('options');
-      Alert.alert('Export failed', String((e as Error).message ?? e));
+      setError(String((e as Error).message ?? e));
+      if (Platform.OS !== 'web') Alert.alert('Export failed', String((e as Error).message ?? e));
     }
   };
 
@@ -141,7 +144,8 @@ export function ExportSheet({
               </Text>
             )}
 
-            <Button label={`Save to “${ALBUM_NAME}”`} onPress={run} style={{ marginTop: 16 }} />
+            {error && <Text style={{ color: theme.danger, marginTop: 10 }}>{error}</Text>}
+            <Button label={Platform.OS === 'web' ? 'Render & download' : `Save to “${ALBUM_NAME}”`} onPress={run} style={{ marginTop: 16 }} />
           </>
         )}
 
@@ -160,14 +164,28 @@ export function ExportSheet({
             <Text style={{ color: theme.text, fontSize: 20, fontWeight: '800' }}>Saved ✓</Text>
             <Text style={{ color: theme.muted, marginTop: 6, lineHeight: 20 }}>
               {result.width} × {result.height} {format.toUpperCase()} · {(result.bytes / 1024 / 1024).toFixed(1)} MB{'\n'}
-              {result.saved.album
+              {Platform.OS === 'web'
+                ? 'Downloaded to your device. In the phone app this goes into its own “Collage Studio” album.'
+                : result.saved.album
                 ? Platform.OS === 'android'
                   ? `In your gallery under Pictures/${ALBUM_NAME}, separate from your camera photos.`
                   : `In Photos → Albums → ${ALBUM_NAME}.`
                 : 'Saved to your photo library.'}
             </Text>
-            <Button label="Post to Instagram" onPress={toInstagram} style={{ marginTop: 18, backgroundColor: theme.accent2 }} />
-            <Button label="Share…" kind="secondary" onPress={() => shareFile(result.uri, mime)} style={{ marginTop: 10 }} />
+            {Platform.OS === 'web' ? (
+              <>
+                <Text style={{ color: theme.muted, marginTop: 12, lineHeight: 20 }}>
+                  To post, open Instagram on your phone or at instagram.com and upload the downloaded file. The phone app
+                  hands it to Instagram in one tap.
+                </Text>
+                <Button label="Download again" kind="secondary" onPress={() => saveToAlbum(result.uri).catch(() => {})} style={{ marginTop: 14 }} />
+              </>
+            ) : (
+              <>
+                <Button label="Post to Instagram" onPress={toInstagram} style={{ marginTop: 18, backgroundColor: theme.accent2 }} />
+                <Button label="Share…" kind="secondary" onPress={() => shareFile(result.uri, mime)} style={{ marginTop: 10 }} />
+              </>
+            )}
             <Button label="Done" kind="ghost" onPress={close} style={{ marginTop: 4 }} />
           </>
         )}

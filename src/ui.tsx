@@ -1,6 +1,6 @@
-import { createPicture, Canvas, Picture } from '@shopify/react-native-skia';
+import { ImageFormat, Skia } from '@shopify/react-native-skia';
 import React, { useMemo, useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
+import { Image, PanResponder, Pressable, StyleSheet, Text, View, type ViewStyle } from 'react-native';
 
 import { DEFAULT_DESIGN, drawBackground, drawCell, IDENTITY, resolveCells } from './render';
 import type { Template } from './templates';
@@ -122,38 +122,46 @@ export function Slider({
 }
 
 const THUMB_DESIGN = { ...DEFAULT_DESIGN, gap: 40, margin: 40, background: '#2A2540', shadow: false };
+const thumbCache = new Map<string, string>();
 
-/** Small Skia preview of a template layout. */
+/**
+ * Renders a template preview once into a small PNG (cached). Using plain
+ * images instead of one live Skia canvas per thumbnail keeps long lists cheap,
+ * and avoids the browser's limit of ~16 WebGL contexts on the web demo.
+ */
+function thumbUri(template: Template, w: number, h: number, aspect: number): string {
+  const px = Math.max(1, Math.round(w * 2));
+  const py = Math.max(1, Math.round(h * 2));
+  const key = `${template.id}|${px}|${py}`;
+  const hit = thumbCache.get(key);
+  if (hit) return hit;
+  const surface = Skia.Surface.Make(px, py);
+  if (!surface) return '';
+  const canvas = surface.getCanvas();
+  // Draw on a 1080-wide virtual canvas, scaled down, so spacing matches the editor.
+  const vw = 1080;
+  const vh = 1080 / aspect;
+  canvas.scale(px / vw, py / vh);
+  drawBackground(canvas, vw, vh, THUMB_DESIGN);
+  resolveCells(template, vw, vh, THUMB_DESIGN).forEach((c) =>
+    drawCell(canvas, c, { image: null, transform: IDENTITY, design: { ...THUMB_DESIGN, radius: 24 }, scale: 1, placeholder: true }),
+  );
+  surface.flush();
+  const img = surface.makeImageSnapshot();
+  const uri = `data:image/png;base64,${img.encodeToBase64(ImageFormat.PNG, 100)}`;
+  img.dispose();
+  surface.dispose();
+  thumbCache.set(key, uri);
+  return uri;
+}
+
 export function TemplateThumb({ template, size, aspect }: { template: Template; size: number; aspect: number }) {
   const w = aspect >= 1 ? size : size * aspect;
   const h = aspect >= 1 ? size / aspect : size;
-  const picture = useMemo(
-    () =>
-      createPicture((canvas) => {
-        // Draw at a 1080-wide virtual canvas, scaled down, so spacing matches the editor.
-        const vw = 1080;
-        const vh = 1080 / aspect;
-        canvas.scale(w / vw, h / vh);
-        drawBackground(canvas, vw, vh, THUMB_DESIGN);
-        const cells = resolveCells(template, vw, vh, THUMB_DESIGN);
-        cells.forEach((c) =>
-          drawCell(canvas, c, {
-            image: null,
-            transform: IDENTITY,
-            design: { ...THUMB_DESIGN, radius: 24 },
-            scale: 1,
-            placeholder: true,
-            selected: false,
-          }),
-        );
-      }),
-    [template, w, h, aspect],
-  );
+  const uri = useMemo(() => thumbUri(template, w, h, aspect), [template, w, h, aspect]);
   return (
     <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
-      <Canvas style={{ width: w, height: h, borderRadius: 6, overflow: 'hidden' }}>
-        <Picture picture={picture} />
-      </Canvas>
+      {uri ? <Image source={{ uri }} style={{ width: w, height: h, borderRadius: 6 }} /> : null}
     </View>
   );
 }
